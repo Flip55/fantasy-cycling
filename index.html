@@ -45,6 +45,8 @@ textarea{width:100%;min-height:140px;font-family:ui-monospace,Menlo,monospace;fo
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .row label{font-size:13px;color:var(--muted)}
 .bidin{width:70px;text-align:right}
+.bidin.bad{border-color:var(--bad);background:#fbe5e6;color:var(--bad)}
+.sticky .hint{flex-basis:100%;font-size:13px;color:#ffb3b3}
 .msg{padding:10px 12px;border-radius:8px;margin:10px 0;font-size:14px}
 .msg.ok{background:#e4f3ea;color:var(--ok)}
 .msg.err{background:#fbe5e6;color:var(--bad)}
@@ -290,7 +292,8 @@ function renderVeiling() {
         <div><div class="k">Ingediend</div><div class="v">${lockedTotal}M</div></div>
         <div><div class="k">Nieuw</div><div class="v ${lockedTotal + draftTotal > me.budgetLeft ? 'bad' : ''}" id="draftTotal">${draftTotal}M</div></div>
         <div><div class="k">Plaatsen</div><div class="v ${Object.keys(draft).length > slots ? 'bad' : ''}" id="slotsLeft">${slots}</div></div>
-        <button class="btn" id="submitBids">Biedingen indienen</button>
+        <button class="btn" id="submitBids" disabled>Biedingen indienen</button>
+        <div class="hint" id="bidHint"></div>
       </div><div id="bidMsg"></div></div>`;
     }
   } else h += `</div>`;
@@ -343,17 +346,44 @@ function renderBidList() {
     inp.oninput = () => {
       const v = inp.value.trim();
       if (v === '') delete draft[inp.dataset.id]; else draft[inp.dataset.id] = v;
-      const me = S.players.find(p => p.name === S.me);
-      const locked = S.bids.filter(b => b.round === S.config.round && b.player === S.me).reduce((s, b) => s + b.amount, 0);
-      const dt = Object.values(draft).reduce((s, v) => s + (Number(v) || 0), 0);
-      const owned = S.riders.filter(r => r.owner === S.me).length;
-      const slots = S.config.maxRiders - owned - myBidIds.size;
-      $('#draftTotal').textContent = dt + 'M';
-      $('#draftTotal').classList.toggle('bad', locked + dt > me.budgetLeft);
-      $('#slotsLeft').textContent = slots - Object.keys(draft).length;
-      $('#slotsLeft').classList.toggle('bad', Object.keys(draft).length > slots);
+      updateBidBar();
     };
   });
+  updateBidBar();
+}
+
+/** Validates the draft, colours invalid inputs, updates the sticky bar and enables/disables submit. */
+function updateBidBar() {
+  const me = S.players.find(p => p.name === S.me);
+  if (!me) return;
+  const myBids = S.bids.filter(b => b.round === S.config.round && b.player === S.me);
+  const locked = myBids.reduce((s, b) => s + b.amount, 0);
+  const owned = S.riders.filter(r => r.owner === S.me).length;
+  const slots = S.config.maxRiders - owned - myBids.length;
+  const problems = [];
+  let total = 0;
+  const invalid = [];
+  Object.entries(draft).forEach(([id, v]) => {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < S.config.minBid) invalid.push(S.riderById[id]?.name || id);
+    else total += n;
+  });
+  document.querySelectorAll('input.bidin').forEach(inp => {
+    const v = draft[inp.dataset.id];
+    inp.classList.toggle('bad', v !== undefined && (!Number.isInteger(Number(v)) || Number(v) < S.config.minBid));
+  });
+  const count = Object.keys(draft).length;
+  if (invalid.length) problems.push(`Ongeldig bod (geheel getal ≥ ${S.config.minBid}M) voor: ${invalid.slice(0, 3).join(', ')}${invalid.length > 3 ? '…' : ''}.`);
+  if (locked + total > me.budgetLeft) problems.push(`Je biedt ${total}M${locked ? ` (+ ${locked}M al ingediend)` : ''} maar hebt nog ${me.budgetLeft}M.`);
+  if (count > slots) problems.push(`Je hebt nog ${slots} plaats${slots === 1 ? '' : 'en'} in je ploeg, maar biedt op ${count} renners.`);
+  const dt = $('#draftTotal'), sl = $('#slotsLeft'), btn = $('#submitBids'), hint = $('#bidHint');
+  if (!dt) return;
+  dt.textContent = total + 'M';
+  dt.classList.toggle('bad', locked + total > me.budgetLeft);
+  sl.textContent = slots - count;
+  sl.classList.toggle('bad', count > slots);
+  hint.textContent = problems.join(' ');
+  btn.disabled = problems.length > 0 || count === 0;
 }
 
 async function submitBids() {
@@ -361,7 +391,7 @@ async function submitBids() {
   const msg = $('#bidMsg');
   if (!bids.length) { msg.innerHTML = `<div class="msg err">Vul eerst een bod in.</div>`; return; }
   const bad = bids.find(b => !Number.isInteger(b.amount) || b.amount < S.config.minBid);
-  if (bad) { msg.innerHTML = `<div class="msg err">Biedingen zijn gehele getallen ≥ ${S.config.minBid}.</div>`; return; }
+  if (bad) { msg.innerHTML = `<div class="msg err">Ongeldig bod voor ${esc(S.riderById[bad.rider_id].name)}: geheel getal ≥ ${S.config.minBid}M.</div>`; return; }
   const total = bids.reduce((s, b) => s + b.amount, 0);
   const lines = bids.map(b => `${S.riderById[b.rider_id].name}: ${b.amount}M`).join('\n');
   if (!confirm(`Je dient ${bids.length} bod/biedingen in voor ${total}M totaal:\n\n${lines}\n\nDit is definitief en kan niet gewijzigd worden. Zeker?`)) return;
