@@ -63,6 +63,10 @@ details summary{cursor:pointer;font-weight:600;padding:6px 0}
 .teamcard h3{margin:0 0 4px;font:800 20px "Barlow Condensed",sans-serif;text-transform:uppercase}
 .rules li{margin:4px 0}
 .hidden{display:none}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+#modal.hidden{display:none}
+.modal-box{background:#fff;border-radius:12px;padding:18px 20px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+#modalText{white-space:pre-wrap;font-size:14px;max-height:50vh;overflow:auto}
 .tag{font-size:11px;padding:1px 6px;border-radius:4px;background:#eee;color:#333;margin-left:4px}
 .tag.r1{background:#dfe9f7}.tag.r2{background:#e3f3df}.tag.r3{background:#f7e4d9}
 @media (max-width:600px){td,th{padding:6px 5px}.hidesm{display:none}}
@@ -108,6 +112,9 @@ details summary{cursor:pointer;font-weight:600;padding:6px 0}
   <section id="tab-regels" class="hidden"></section>
   <section id="tab-admin" class="hidden"></section>
 </main>
+<div id="modal" class="hidden" role="dialog" aria-modal="true">
+  <div class="modal-box"><div id="modalText"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="modalNo">Annuleren</button><button class="btn" id="modalYes">OK</button></div></div>
+</div>
 
 <script>
 /* ===================== CONFIG ===================== */
@@ -208,6 +215,18 @@ function parsePcsStartlist(text) {
     prevEnd = m.index + m[0].length;
   }
   return out;
+}
+
+/* ---------- in-page confirm (browser confirm() is blocked in some embeds) ---------- */
+function ask(text, yesLabel) {
+  return new Promise(resolve => {
+    const m = $('#modal'); $('#modalText').textContent = text; $('#modalYes').textContent = yesLabel || 'OK';
+    m.classList.remove('hidden');
+    const done = v => { m.classList.add('hidden'); $('#modalYes').onclick = $('#modalNo').onclick = null; resolve(v); };
+    $('#modalYes').onclick = () => done(true); $('#modalNo').onclick = () => done(false);
+    m.onclick = e => { if (e.target === m) done(false); };
+    setTimeout(() => $('#modalYes').focus(), 0);
+  });
 }
 
 /* ---------- helpers ---------- */
@@ -394,7 +413,7 @@ async function submitBids() {
   if (bad) { msg.innerHTML = `<div class="msg err">Ongeldig bod voor ${esc(S.riderById[bad.rider_id].name)}: geheel getal ≥ ${S.config.minBid}M.</div>`; return; }
   const total = bids.reduce((s, b) => s + b.amount, 0);
   const lines = bids.map(b => `${S.riderById[b.rider_id].name}: ${b.amount}M`).join('\n');
-  if (!confirm(`Je dient ${bids.length} bod/biedingen in voor ${total}M totaal:\n\n${lines}\n\nDit is definitief en kan niet gewijzigd worden. Zeker?`)) return;
+  if (!await ask(`Je dient ${bids.length} bod/biedingen in voor ${total}M totaal:\n\n${lines}\n\nDit is definitief en kan niet gewijzigd worden.`, 'Indienen')) return;
   $('#submitBids').disabled = true;
   try {
     await api({ action: 'bid', token, round: S.config.round, bids }, true);
@@ -496,9 +515,9 @@ async function adminAction(act, btn) {
   }
   if (act === 'openRound' || act === 'setDeadline') p.deadline = $('#deadline').value;
   if (act === 'importResults' || act === 'deleteResults') { p.label = $('#resLabel').value; p.text = $('#resText').value; }
-  if (act === 'closeRound' && !confirm(`Ronde ${S.config.round} sluiten? Renners worden toegewezen en biedingen openbaar.`)) return;
-  if (act === 'deleteResults' && !confirm(`Punten van "${p.label}" verwijderen?`)) return;
-  if (act === 'reset') { if (prompt('Typ RESET om te bevestigen') !== 'RESET') return; p.confirm = 'RESET'; }
+  if (act === 'closeRound' && !await ask(`Ronde ${S.config.round} sluiten?\n\nRenners worden toegewezen aan de hoogste bieders en alle biedingen worden openbaar. Daarna kan niemand nog bieden in deze ronde.`, 'Sluiten & toewijzen')) return;
+  if (act === 'deleteResults' && !await ask(`Punten van "${p.label}" verwijderen?`, 'Verwijderen')) return;
+  if (act === 'reset') { if (!await ask('Alle biedingen, eigenaars en punten wissen? Spelers en renners blijven staan.', 'Ja, reset')) return; p.confirm = 'RESET'; }
   btn.disabled = true;
   try {
     const r = await api(p, true);

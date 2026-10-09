@@ -59,6 +59,9 @@ async function api(params, post) {
   if (params.action === 'addPlayer') return { ok: true, name: params.name || 'Demo', token: 'K7Q2PX' };
   if (params.action === 'importStartlist') return { ok: true, parsed: 154, added: 0, sample: [] };
   if (params.action === 'importResults') return { ok: true, label: params.label || 'Etappe 3', matched: 41, unmatched: ['12\\t3\\tSOMEONE Else\\t24\\tOther Team\\t2'] };
+  if (params.action === 'closeRound') { if (!st.config.roundOpen) throw new Error('Er is geen ronde open.'); const r3 = st.bids.filter(b => b.round === 3); const by = {}; r3.forEach(b => (by[b.rider_id] = by[b.rider_id] || []).push(b)); let sold = 0, ties = []; Object.keys(by).forEach(id => { const l = by[id], max = Math.max(...l.map(x => x.amount)), top = l.filter(x => x.amount === max); if (top.length === 1) { const r = st.riders.find(x => x.id === id); r.owner = top[0].player; r.price = max; r.round = 3; st.players.find(p => p.name === top[0].player).budgetLeft -= max; sold++; } else ties.push(id); }); st.config.roundOpen = false; st.config.deadline = ''; return { ok: true, round: 3, sold, ties }; }
+  if (params.action === 'openRound') { st.config.roundOpen = true; st.config.deadline = params.deadline || ''; return { ok: true, round: st.config.round }; }
+  if (params.action === 'setDeadline') { st.config.deadline = params.deadline || ''; return { ok: true }; }
   throw new Error('Dit is een demo: deze actie doet hier niets.');
 }
 document.addEventListener('DOMContentLoaded', () => {
