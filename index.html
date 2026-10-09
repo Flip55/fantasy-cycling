@@ -182,6 +182,32 @@ $('#loginBtn').onclick = () => {
   load();
 };
 
+/* ---------- PCS startlist parser ---------- */
+// PCS startlist parser – shared source for index.html and Code.gs (kept here for tests).
+// Handles the "one long line" PCS copy:  "1 Team Jayco AlUla 1. DOUBLE Paul 2. DE BONDT Dries ... DS: DE MARCHI Alessandro 2 Alpecin - Premier Tech 11. BAYER Tobias ..."
+// and the multi-line variants ("1. DOUBLE Paul" or "1 DOUBLE Paul" per line, team names on their own lines).
+function parsePcsStartlist(text) {
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  var out = [];
+  // rider token: "<bib>. NAME Firstname" up to next "<bib>." / "DS:" / end
+  var re = /(\d{1,3})\.\s*([^\d]+?)(?=\s*(?:\d{1,3}\.\s*[^\d]|DS:|$))/g;
+  var m, prevEnd = 0, team = '', n = 0;
+  while ((m = re.exec(t)) !== null) {
+    var gap = t.slice(prevEnd, m.index).trim();
+    if (gap) {
+      // gap looks like "DS: X Y 2 Alpecin - Premier Tech" or (first) "1 Team Jayco AlUla"
+      var g = gap.replace(/^[\s\S]*?DS:\s*/, '');
+      var tm = g.match(/^(?:.*?\s)?(\d{1,2})\s+(.+)$/);
+      if (tm) team = tm[2].trim();
+      else if (!/DS:/.test(gap)) team = g.trim();
+    }
+    var name = m[2].replace(/\s+(DNS|DNF|OTL|DSQ)$/i, '').trim();
+    if (/[A-ZÀ-Ž]{2,}/.test(name) && name.length > 3) { out.push({ name: name, team: team }); n++; }
+    prevEnd = m.index + m[0].length;
+  }
+  return out;
+}
+
 /* ---------- helpers ---------- */
 function standings() {
   return S.players.map(p => {
@@ -429,7 +455,15 @@ async function adminAction(act, btn) {
   const msg = $('#adminMsg');
   const p = { action: act, adminToken };
   if (act === 'addPlayer') p.name = $('#newPlayer').value;
-  if (act === 'importStartlist') p.text = $('#startlistText').value;
+  if (act === 'importStartlist') {
+    const raw = $('#startlistText').value;
+    // PCS copies the startlist as one long line ("1 Team X 1. NAME First 2. ... DS: ..."); convert to "NAME;Team" lines
+    if (/DS:/.test(raw) || raw.trim().split('\n').length < 3) {
+      const parsed = parsePcsStartlist(raw);
+      if (parsed.length >= 5) p.text = parsed.map(r => `${r.name};${r.team}`).join('\n');
+    }
+    if (!p.text) p.text = raw;
+  }
   if (act === 'openRound' || act === 'setDeadline') p.deadline = $('#deadline').value;
   if (act === 'importResults' || act === 'deleteResults') { p.label = $('#resLabel').value; p.text = $('#resText').value; }
   if (act === 'closeRound' && !confirm(`Ronde ${S.config.round} sluiten? Renners worden toegewezen en biedingen openbaar.`)) return;
