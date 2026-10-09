@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy Cycling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f1ea; --panel:#ffffff; --ink:#15181d; --muted:#6b6f77; --line:#e3ded3;
+  --accent:#d9480f; --accent-ink:#fff; --ok:#1e7f4f; --warn:#b4530a; --bad:#b4232a;
+  --chip:#efe9dc; --gold:#c99a2e;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Inter,system-ui,sans-serif}
+header{background:var(--ink);color:#fff;padding:14px 16px 0}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{font:800 28px/1 "Barlow Condensed",sans-serif;letter-spacing:.5px;margin:0;text-transform:uppercase}
+.brand .race{color:#c9c4b8;font-size:13px}
+.me{margin-left:auto;font-size:13px;color:#c9c4b8}
+.me b{color:#fff}
+.me a{color:#f3b58c;cursor:pointer;margin-left:8px}
+nav{display:flex;gap:4px;margin-top:12px;overflow-x:auto}
+nav button{background:none;border:0;color:#c9c4b8;font:600 15px "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.6px;padding:10px 12px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+nav button.on{color:#fff;border-color:var(--accent)}
+main{max-width:980px;margin:0 auto;padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+h2{font:800 22px/1.1 "Barlow Condensed",sans-serif;text-transform:uppercase;margin:0 0 10px;letter-spacing:.4px}
+h3{font:700 16px/1.2 Inter,sans-serif;margin:14px 0 6px}
+.muted{color:var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.me td{background:#fff6ef}
+.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:500}
+.chip.gold{background:#f6e7bd}
+button.btn,.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:8px;padding:9px 14px;font:600 14px Inter,sans-serif;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+input[type=text],input[type=number],input[type=password],textarea,select{font:14px Inter,sans-serif;border:1px solid #cfc9bc;border-radius:7px;padding:8px 10px;background:#fff;color:var(--ink)}
+textarea{width:100%;min-height:140px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.row label{font-size:13px;color:var(--muted)}
+.bidin{width:70px;text-align:right}
+.msg{padding:10px 12px;border-radius:8px;margin:10px 0;font-size:14px}
+.msg.ok{background:#e4f3ea;color:var(--ok)}
+.msg.err{background:#fbe5e6;color:var(--bad)}
+.msg.info{background:#fff1e6;color:var(--warn)}
+.sticky{position:sticky;bottom:0;background:var(--ink);color:#fff;border-radius:10px;padding:12px 14px;margin-top:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;box-shadow:0 -4px 16px rgba(0,0,0,.15)}
+.sticky .k{font-size:12px;color:#c9c4b8;text-transform:uppercase;letter-spacing:.5px}
+.sticky .v{font:800 22px/1 "Barlow Condensed",sans-serif}
+.sticky .v.bad{color:#ff8a8a}
+.sticky .btn{margin-left:auto}
+.lock{color:var(--muted);font-size:12px}
+details summary{cursor:pointer;font-weight:600;padding:6px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.teamcard{border:1px solid var(--line);border-radius:10px;padding:12px}
+.teamcard h3{margin:0 0 4px;font:800 20px "Barlow Condensed",sans-serif;text-transform:uppercase}
+.rules li{margin:4px 0}
+.hidden{display:none}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:#eee;color:#333;margin-left:4px}
+.tag.r1{background:#dfe9f7}.tag.r2{background:#e3f3df}.tag.r3{background:#f7e4d9}
+@media (max-width:600px){td,th{padding:6px 5px}.hidesm{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Fantasy Cycling</h1>
+    <span class="race" id="raceName"></span>
+    <span class="me" id="meBox"></span>
+  </div>
+  <nav id="nav">
+    <button data-tab="stand" class="on">Klassement</button>
+    <button data-tab="teams">Teams</button>
+    <button data-tab="veiling">Veiling</button>
+    <button data-tab="renners">Renners</button>
+    <button data-tab="regels">Regels</button>
+    <button data-tab="admin" id="adminTab">Admin</button>
+  </nav>
+</header>
+<main>
+  <div id="noapi" class="card hidden">
+    <h2>Nog niet gekoppeld</h2>
+    <p>Zet de URL van je Apps Script web app in <code>index.html</code> (<code>API_URL</code>) – zie README.</p>
+  </div>
+  <div id="loading" class="muted">Laden…</div>
+  <div id="loginCard" class="card hidden">
+    <h2>Wie ben je?</h2>
+    <div class="row">
+      <select id="loginName"></select>
+      <input type="text" id="loginToken" placeholder="jouw code" style="width:120px;text-transform:uppercase">
+      <button class="btn" id="loginBtn">Inloggen</button>
+    </div>
+    <div class="muted">Je code krijg je van de notaris. Zonder login kan je wel alles bekijken, maar niet bieden.</div>
+    <div id="loginMsg"></div>
+  </div>
+
+  <section id="tab-stand"></section>
+  <section id="tab-teams" class="hidden"></section>
+  <section id="tab-veiling" class="hidden"></section>
+  <section id="tab-renners" class="hidden"></section>
+  <section id="tab-regels" class="hidden"></section>
+  <section id="tab-admin" class="hidden"></section>
+</main>
+
+<script>
+/* ===================== CONFIG ===================== */
+// Paste your Apps Script web-app URL here (ends with /exec)
+const API_URL = "";
+/* ================================================== */
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S = null;                 // state from server
+let token = localStorage.getItem('fc_token') || '';
+let adminToken = localStorage.getItem('fc_admin') || '';
+let draft = {};               // rider_id -> amount (unsubmitted)
+
+async function api(params, post = false) {
+  if (!API_URL) throw new Error('API_URL ontbreekt');
+  let res;
+  if (post) {
+    res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(params), headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+  } else {
+    const q = new URLSearchParams(params).toString();
+    res = await fetch(API_URL + '?' + q);
+  }
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'onbekende fout');
+  return j;
+}
+
+async function load() {
+  if (!API_URL) { $('#noapi').classList.remove('hidden'); $('#loading').classList.add('hidden'); return; }
+  try {
+    S = await api({ action: 'state', token });
+    S.riderById = Object.fromEntries(S.riders.map(r => [r.id, r]));
+    $('#loading').classList.add('hidden');
+    renderAll();
+  } catch (e) {
+    $('#loading').textContent = 'Fout bij laden: ' + e.message;
+  }
+}
+
+function renderAll() {
+  $('#raceName').textContent = S.config.raceName;
+  renderMe();
+  renderStand();
+  renderTeams();
+  renderVeiling();
+  renderRenners();
+  renderRegels();
+  renderAdmin();
+}
+
+/* ---------- login ---------- */
+function renderMe() {
+  const box = $('#meBox');
+  if (S.me) {
+    const p = S.players.find(x => x.name === S.me);
+    box.innerHTML = `<b>${esc(S.me)}</b> · ${p ? p.budgetLeft : '?'}M over <a id="logout">uitloggen</a>`;
+    $('#logout').onclick = () => { token = ''; localStorage.removeItem('fc_token'); draft = {}; load(); };
+    $('#loginCard').classList.add('hidden');
+  } else {
+    box.innerHTML = `<a id="showLogin">inloggen</a>`;
+    $('#showLogin').onclick = () => $('#loginCard').classList.toggle('hidden');
+    const sel = $('#loginName');
+    sel.innerHTML = S.players.map(p => `<option>${esc(p.name)}</option>`).join('');
+    if (token) {
+      $('#loginCard').classList.remove('hidden');
+      $('#loginMsg').innerHTML = `<div class="msg err">Code niet herkend.</div>`;
+    }
+  }
+}
+$('#loginBtn').onclick = () => {
+  token = $('#loginToken').value.trim().toUpperCase();
+  localStorage.setItem('fc_token', token);
+  load();
+};
+
+/* ---------- helpers ---------- */
+function standings() {
+  return S.players.map(p => {
+    const riders = S.riders.filter(r => r.owner === p.name);
+    return { name: p.name, budgetLeft: p.budgetLeft, riders, points: riders.reduce((s, r) => s + r.points, 0), spent: riders.reduce((s, r) => s + (r.price || 0), 0) };
+  }).sort((a, b) => b.points - a.points || b.budgetLeft - a.budgetLeft || a.name.localeCompare(b.name));
+}
+function roundStatus() {
+  const c = S.config;
+  if (c.round === 0) return { text: 'De veiling is nog niet gestart.', open: false };
+  if (c.roundOpen) return { text: `Ronde ${c.round} van ${c.rounds} is open` + (c.deadline ? ` – deadline: ${c.deadline}` : ''), open: true };
+  if (c.round >= c.rounds) return { text: 'De veiling is afgelopen.', open: false };
+  return { text: `Ronde ${c.round} is gesloten – wachten op ronde ${c.round + 1}.`, open: false };
+}
+
+/* ---------- Klassement ---------- */
+function renderStand() {
+  const st = standings();
+  const rs = roundStatus();
+  let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${S.resultLabels.length ? 'Verwerkt: ' + S.resultLabels.map(esc).join(', ') : 'Nog geen resultaten verwerkt.'}</div>
+  <table><thead><tr><th>#</th><th>Speler</th><th class="num">Punten</th><th class="num hidesm">Renners</th><th class="num">Budget over</th></tr></thead><tbody>`;
+  st.forEach((p, i) => {
+    h += `<tr class="${p.name === S.me ? 'me' : ''}"><td>${i + 1}</td><td><b>${esc(p.name)}</b></td><td class="num"><b>${p.points}</b></td><td class="num hidesm">${p.riders.length}</td><td class="num">${p.budgetLeft}M</td></tr>`;
+  });
+  h += `</tbody></table></div>`;
+  // top scorers
+  const top = [...S.riders].filter(r => r.points > 0).sort((a, b) => b.points - a.points).slice(0, 10);
+  if (top.length) {
+    h += `<div class="card"><h2>Topscorers</h2><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th></tr></thead><tbody>`;
+    top.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">–</span>'}</td><td class="num"><b>${r.points}</b></td></tr>`);
+    h += `</tbody></table></div>`;
+  }
+  $('#tab-stand').innerHTML = h;
+}
+
+/* ---------- Teams ---------- */
+function renderTeams() {
+  const st = standings();
+  let h = `<div class="grid">`;
+  st.forEach(p => {
+    h += `<div class="teamcard"><h3>${esc(p.name)}</h3><div class="muted">${p.points} pnt · ${p.riders.length}/${S.config.maxRiders} renners · ${p.spent}M uitgegeven · ${p.budgetLeft}M over</div>`;
+    if (p.riders.length) {
+      h += `<table><tbody>`;
+      [...p.riders].sort((a, b) => b.points - a.points || (b.price || 0) - (a.price || 0)).forEach(r => {
+        h += `<tr><td>${esc(r.name)}<span class="tag r${r.round}">R${r.round}</span></td><td class="num muted">${r.price}M</td><td class="num"><b>${r.points}</b></td></tr>`;
+      });
+      h += `</tbody></table>`;
+    } else h += `<div class="muted" style="margin-top:8px">Nog geen renners.</div>`;
+    h += `</div>`;
+  });
+  h += `</div>`;
+  $('#tab-teams').innerHTML = h;
+}
+
+/* ---------- Veiling ---------- */
+function renderVeiling() {
+  const c = S.config, rs = roundStatus();
+  let h = `<div class="card"><h2>Veiling</h2><div class="msg ${rs.open ? 'ok' : 'info'}">${esc(rs.text)}</div>`;
+
+  if (rs.open) {
+    if (!S.me) {
+      h += `<div class="muted">Log in om te bieden.</div></div>`;
+    } else {
+      const me = S.players.find(p => p.name === S.me);
+      const myBids = S.bids.filter(b => b.round === c.round && b.player === S.me);
+      const owned = S.riders.filter(r => r.owner === S.me).length;
+      const lockedTotal = myBids.reduce((s, b) => s + b.amount, 0);
+      const draftTotal = Object.values(draft).reduce((s, v) => s + (Number(v) || 0), 0);
+      const slots = c.maxRiders - owned - myBids.length;
+      h += `<div class="muted">Bied per miljoen (geheel getal, min. ${c.minBid}M). Som van al je biedingen deze ronde ≤ je budget. Een ingediend bod is <b>definitief</b>. Hoogste bod wint; bij ex aequo blijft de renner vrij.</div>`;
+      if (myBids.length) {
+        h += `<h3>Jouw ingediende biedingen (ronde ${c.round})</h3><table><tbody>`;
+        myBids.forEach(b => h += `<tr><td>${esc(S.riderById[b.rider_id]?.name || b.rider_id)}</td><td class="num">${b.amount}M <span class="lock">🔒</span></td></tr>`);
+        h += `</tbody></table>`;
+      }
+      h += `<h3>Vrije renners</h3><div class="row"><input type="text" id="bidSearch" placeholder="zoek renner of ploeg…" style="flex:1"></div>
+      <div id="bidList"></div>
+      <div class="sticky">
+        <div><div class="k">Budget</div><div class="v">${me.budgetLeft}M</div></div>
+        <div><div class="k">Ingediend</div><div class="v">${lockedTotal}M</div></div>
+        <div><div class="k">Nieuw</div><div class="v ${lockedTotal + draftTotal > me.budgetLeft ? 'bad' : ''}" id="draftTotal">${draftTotal}M</div></div>
+        <div><div class="k">Plaatsen</div><div class="v ${Object.keys(draft).length > slots ? 'bad' : ''}" id="slotsLeft">${slots}</div></div>
+        <button class="btn" id="submitBids">Biedingen indienen</button>
+      </div><div id="bidMsg"></div></div>`;
+    }
+  } else h += `</div>`;
+
+  // closed rounds
+  for (let r = c.round; r >= 1; r--) {
+    if (r === c.round && c.roundOpen) continue;
+    const bids = S.bids.filter(b => b.round === r);
+    const byRider = {};
+    bids.forEach(b => (byRider[b.rider_id] = byRider[b.rider_id] || []).push(b));
+    const rows = Object.keys(byRider).map(id => {
+      const list = byRider[id].sort((a, b) => b.amount - a.amount);
+      const rider = S.riderById[id] || { name: id };
+      const sold = rider.owner && rider.round === r;
+      return { rider, list, sold, max: list[0].amount };
+    }).sort((a, b) => b.max - a.max);
+    h += `<div class="card"><details ${r === c.round ? 'open' : ''}><summary>Ronde ${r} – ${rows.filter(x => x.sold).length} verkocht, ${rows.filter(x => !x.sold).length} ex aequo</summary>`;
+    if (!rows.length) h += `<div class="muted">Geen biedingen.</div>`;
+    else {
+      h += `<table><thead><tr><th>Renner</th><th>Resultaat</th><th class="hidesm">Alle biedingen</th></tr></thead><tbody>`;
+      rows.forEach(x => {
+        h += `<tr><td>${esc(x.rider.name)}</td><td>${x.sold ? `<b>${esc(x.rider.owner)}</b> · ${x.rider.price}M` : `<span class="chip">ex aequo ${x.max}M – blijft vrij</span>`}</td><td class="hidesm muted">${x.list.map(b => `${esc(b.player)} ${b.amount}`).join(' · ')}</td></tr>`;
+      });
+      h += `</tbody></table>`;
+    }
+    h += `</details></div>`;
+  }
+  $('#tab-veiling').innerHTML = h;
+  if (rs.open && S.me) {
+    renderBidList();
+    $('#bidSearch').oninput = renderBidList;
+    $('#submitBids').onclick = submitBids;
+  }
+}
+
+function renderBidList() {
+  const q = ($('#bidSearch')?.value || '').toLowerCase();
+  const myBidIds = new Set(S.bids.filter(b => b.round === S.config.round && b.player === S.me).map(b => b.rider_id));
+  const free = S.riders.filter(r => !r.owner && !myBidIds.has(r.id) && (!q || (r.name + ' ' + r.team).toLowerCase().includes(q)));
+  // keep drafted riders on top
+  free.sort((a, b) => (draft[b.id] ? 1 : 0) - (draft[a.id] ? 1 : 0) || a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
+  let h = `<table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th class="num">Bod (M)</th></tr></thead><tbody>`;
+  free.slice(0, 250).forEach(r => {
+    h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td class="num"><input class="bidin" type="number" min="${S.config.minBid}" step="1" data-id="${esc(r.id)}" value="${draft[r.id] ?? ''}" placeholder="–"></td></tr>`;
+  });
+  h += `</tbody></table>`;
+  if (free.length > 250) h += `<div class="muted">Verfijn je zoekopdracht (${free.length} renners).</div>`;
+  $('#bidList').innerHTML = h;
+  $('#bidList').querySelectorAll('input.bidin').forEach(inp => {
+    inp.oninput = () => {
+      const v = inp.value.trim();
+      if (v === '') delete draft[inp.dataset.id]; else draft[inp.dataset.id] = v;
+      const me = S.players.find(p => p.name === S.me);
+      const locked = S.bids.filter(b => b.round === S.config.round && b.player === S.me).reduce((s, b) => s + b.amount, 0);
+      const dt = Object.values(draft).reduce((s, v) => s + (Number(v) || 0), 0);
+      const owned = S.riders.filter(r => r.owner === S.me).length;
+      const slots = S.config.maxRiders - owned - myBidIds.size;
+      $('#draftTotal').textContent = dt + 'M';
+      $('#draftTotal').classList.toggle('bad', locked + dt > me.budgetLeft);
+      $('#slotsLeft').textContent = slots - Object.keys(draft).length;
+      $('#slotsLeft').classList.toggle('bad', Object.keys(draft).length > slots);
+    };
+  });
+}
+
+async function submitBids() {
+  const bids = Object.entries(draft).map(([rider_id, amount]) => ({ rider_id, amount: Number(amount) }));
+  const msg = $('#bidMsg');
+  if (!bids.length) { msg.innerHTML = `<div class="msg err">Vul eerst een bod in.</div>`; return; }
+  const bad = bids.find(b => !Number.isInteger(b.amount) || b.amount < S.config.minBid);
+  if (bad) { msg.innerHTML = `<div class="msg err">Biedingen zijn gehele getallen ≥ ${S.config.minBid}.</div>`; return; }
+  const total = bids.reduce((s, b) => s + b.amount, 0);
+  const lines = bids.map(b => `${S.riderById[b.rider_id].name}: ${b.amount}M`).join('\n');
+  if (!confirm(`Je dient ${bids.length} bod/biedingen in voor ${total}M totaal:\n\n${lines}\n\nDit is definitief en kan niet gewijzigd worden. Zeker?`)) return;
+  $('#submitBids').disabled = true;
+  try {
+    await api({ action: 'bid', token, round: S.config.round, bids }, true);
+    draft = {};
+    await load();
+    document.querySelector('[data-tab=veiling]').click();
+    $('#bidMsg').innerHTML = `<div class="msg ok">Biedingen ingediend.</div>`;
+  } catch (e) {
+    msg.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    $('#submitBids').disabled = false;
+  }
+}
+
+/* ---------- Renners ---------- */
+let riderSort = 'points';
+function renderRenners() {
+  const h = `<div class="card"><h2>Renners</h2>
+    <div class="row"><input type="text" id="riderSearch" placeholder="zoek renner, ploeg of eigenaar…" style="flex:1">
+    <select id="riderSort"><option value="points">Sorteer: punten</option><option value="name">Sorteer: naam</option><option value="team">Sorteer: ploeg</option><option value="price">Sorteer: prijs</option></select></div>
+    <div id="riderTable"></div></div>`;
+  $('#tab-renners').innerHTML = h;
+  $('#riderSearch').oninput = renderRiderTable;
+  $('#riderSort').onchange = e => { riderSort = e.target.value; renderRiderTable(); };
+  $('#riderSort').value = riderSort;
+  renderRiderTable();
+}
+function renderRiderTable() {
+  const q = ($('#riderSearch')?.value || '').toLowerCase();
+  let list = S.riders.filter(r => !q || (r.name + ' ' + r.team + ' ' + (r.owner || '')).toLowerCase().includes(q));
+  const cmp = { points: (a, b) => b.points - a.points || a.name.localeCompare(b.name), name: (a, b) => a.name.localeCompare(b.name), team: (a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name), price: (a, b) => (b.price || 0) - (a.price || 0) || a.name.localeCompare(b.name) }[riderSort];
+  list.sort(cmp);
+  let h = `<div class="muted">${list.length} renners · ${S.riders.filter(r => r.owner).length} verkocht</div><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Prijs</th><th class="num">Pnt</th></tr></thead><tbody>`;
+  list.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">vrij</span>'}</td><td class="num">${r.price != null ? r.price + 'M' : ''}</td><td class="num"><b>${r.points}</b></td></tr>`);
+  $('#riderTable').innerHTML = h + `</tbody></table>`;
+}
+
+/* ---------- Regels ---------- */
+function renderRegels() {
+  const c = S.config;
+  $('#tab-regels').innerHTML = `<div class="card"><h2>Spelregels</h2><ul class="rules">
+  <li>Iedereen heeft een budget van <b>${c.budget} miljoen</b>. Een ploeg telt <b>minstens 1 en maximaal ${c.maxRiders} renners</b>.</li>
+  <li>Renners worden verkocht via een <b>gesloten enveloppe veiling</b> in <b>${c.rounds} rondes</b>. Enkel renners van de startlijst.</li>
+  <li>Je biedt per miljoen (gehele getallen, minimum ${c.minBid}M). Geen maximum, maar de <b>som van al je biedingen in een ronde</b> mag je resterende budget niet overschrijden.</li>
+  <li>Een ingediend bod is <b>definitief</b> en kan niet gewijzigd of ingetrokken worden.</li>
+  <li>Het hoogste bod wint en betaalt zijn bod. Bij <b>ex aequo</b> koopt niemand de renner; hij blijft vrij voor de volgende ronde (na ronde ${c.rounds}: hij blijft onverkocht).</li>
+  <li>Na elke ronde worden <b>alle biedingen openbaar</b> (wie bood hoeveel op wie).</li>
+  <li>Renners die niet starten of uitvallen: pech, geld is weg.</li>
+  <li><b>Punten</b> = alles wat ProCyclingStats als UCI-punten toont (etappes, eindklassement, nevenklassementen). Ze worden om 22u verwerkt zoals PCS ze op dat moment toont; latere correcties van UCI of PCS tellen niet.</li>
+  <li>Resterend budget heeft geen functie, behalve als <b>tiebreaker</b> in het eindklassement (meer budget over = hoger).</li>
+  </ul></div>`;
+}
+
+/* ---------- Admin ---------- */
+function renderAdmin() {
+  const c = S.config;
+  let h = `<div class="card"><h2>Notaris</h2>
+  <div class="row"><label>Admin code</label><input type="password" id="adminTok" value="${esc(adminToken)}" style="width:160px"><span class="muted">(staat in de Config-tab van je Google Sheet)</span></div>
+  <div id="adminMsg"></div></div>`;
+
+  h += `<div class="card"><h3>1. Spelers</h3><div class="muted">${S.players.map(p => esc(p.name)).join(', ') || 'nog geen spelers'}</div>
+  <div class="row"><input type="text" id="newPlayer" placeholder="naam"><button class="btn ghost" data-act="addPlayer">Speler toevoegen</button></div>
+  <div class="muted">De code die verschijnt, bezorg je privé aan de speler. (Ook zichtbaar in de Players-tab van de sheet.)</div></div>`;
+
+  h += `<div class="card"><h3>2. Startlijst</h3><div class="muted">${S.riders.length} renners geladen. Ga op PCS naar de startlist-pagina van de wedstrijd, selecteer alles (Ctrl/Cmd+A), kopieer en plak hieronder. Ploegnamen worden herkend uit de kopjes; renners uit regels zoals "1 EVENEPOEL Remco". Alternatief: één regel per renner "NAAM Voornaam;Ploeg".</div>
+  <textarea id="startlistText" placeholder="plak hier de startlijst…"></textarea>
+  <div class="row"><button class="btn ghost" data-act="importStartlist">Startlijst importeren</button></div></div>`;
+
+  h += `<div class="card"><h3>3. Veiling</h3><div class="muted">Status: ${esc(roundStatus().text)}</div>
+  <div class="row"><input type="text" id="deadline" placeholder="deadline tekst, bv. za 11/10 20:00" value="${esc(c.deadline)}" style="width:260px">
+  <button class="btn" data-act="openRound" ${c.roundOpen || c.round >= c.rounds ? 'disabled' : ''}>Ronde ${Math.min(c.round + 1, c.rounds)} openen</button>
+  <button class="btn ghost" data-act="setDeadline" ${!c.roundOpen ? 'disabled' : ''}>Deadline aanpassen</button>
+  <button class="btn danger" data-act="closeRound" ${!c.roundOpen ? 'disabled' : ''}>Ronde ${c.round} sluiten &amp; toewijzen</button></div></div>`;
+
+  h += `<div class="card"><h3>4. Resultaten (UCI-punten)</h3><div class="muted">Elke avond om 22u: open op PCS de resultaten (etappe, en op het einde GC + nevenklassementen), kopieer de tabel en plak ze hier met een label. Hetzelfde label opnieuw importeren <b>vervangt</b> die import. Verwerkt: ${S.resultLabels.map(l => `<span class="chip">${esc(l)}</span>`).join(' ') || 'niets'}</div>
+  <div class="row"><input type="text" id="resLabel" placeholder="label, bv. Etappe 1" style="width:200px"></div>
+  <textarea id="resText" placeholder="plak hier de resultatentabel (kolommen met Rider, Team, UCI)…"></textarea>
+  <div class="row"><button class="btn" data-act="importResults">Punten importeren</button><button class="btn ghost" data-act="deleteResults">Label verwijderen</button></div></div>`;
+
+  h += `<div class="card"><h3>Gevarenzone</h3><div class="row"><button class="btn danger" data-act="reset">Reset veiling &amp; punten</button><span class="muted">Spelers en renners blijven, biedingen/eigenaars/punten worden gewist.</span></div></div>`;
+
+  $('#tab-admin').innerHTML = h;
+  $('#adminTok').onchange = e => { adminToken = e.target.value.trim(); localStorage.setItem('fc_admin', adminToken); };
+  $('#tab-admin').querySelectorAll('[data-act]').forEach(b => b.onclick = () => adminAction(b.dataset.act, b));
+}
+
+async function adminAction(act, btn) {
+  adminToken = $('#adminTok').value.trim(); localStorage.setItem('fc_admin', adminToken);
+  const msg = $('#adminMsg');
+  const p = { action: act, adminToken };
+  if (act === 'addPlayer') p.name = $('#newPlayer').value;
+  if (act === 'importStartlist') p.text = $('#startlistText').value;
+  if (act === 'openRound' || act === 'setDeadline') p.deadline = $('#deadline').value;
+  if (act === 'importResults' || act === 'deleteResults') { p.label = $('#resLabel').value; p.text = $('#resText').value; }
+  if (act === 'closeRound' && !confirm(`Ronde ${S.config.round} sluiten? Renners worden toegewezen en biedingen openbaar.`)) return;
+  if (act === 'deleteResults' && !confirm(`Punten van "${p.label}" verwijderen?`)) return;
+  if (act === 'reset') { if (prompt('Typ RESET om te bevestigen') !== 'RESET') return; p.confirm = 'RESET'; }
+  btn.disabled = true;
+  try {
+    const r = await api(p, true);
+    let t = 'OK.';
+    if (act === 'addPlayer') t = `Speler <b>${esc(r.name)}</b> toegevoegd. Code: <b style="font-size:18px;letter-spacing:2px">${esc(r.token)}</b>`;
+    if (act === 'importStartlist') t = `${r.parsed} renners herkend, ${r.added} nieuw toegevoegd.` + (r.sample?.length ? ` Bv. ${esc(r.sample[0].name)} (${esc(r.sample[0].team)})` : '');
+    if (act === 'closeRound') t = `Ronde ${r.round} gesloten: ${r.sold} renners verkocht, ${r.ties.length} ex aequo.`;
+    if (act === 'importResults') t = `"${esc(r.label)}": ${r.matched} renners met punten.` + (r.unmatched.length ? `<br><span class="muted">Niet herkend (${r.unmatched.length}): ${r.unmatched.map(esc).join(' | ')}</span>` : '');
+    if (act === 'deleteResults') t = `${r.removed} regels verwijderd.`;
+    await load();
+    document.querySelector('[data-tab=admin]').click();
+    $('#adminMsg').innerHTML = `<div class="msg ok">${t}</div>`;
+  } catch (e) {
+    msg.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    btn.disabled = false;
+  }
+}
+
+/* ---------- nav ---------- */
+$('#nav').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('#nav').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + b.dataset.tab));
+  location.hash = b.dataset.tab;
+});
+if (location.hash) { const b = $(`#nav [data-tab=${location.hash.slice(1)}]`); if (b) b.click(); }
+load();
+setInterval(() => {
+  const busy = Object.keys(draft).length || location.hash === '#admin' || [...document.querySelectorAll('textarea')].some(t => t.value);
+  if (!busy && document.visibilityState === 'visible') load();
+}, 60000);
+</script>
+</body>
+</html>
