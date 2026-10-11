@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
+<meta http-equiv="Cache-Control" content="no-cache">
 <title>Fantasy Cycling</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -71,7 +72,8 @@ details summary{cursor:pointer;font-weight:600;padding:6px 0}
 #modalText{white-space:pre-wrap;font-size:14px;max-height:50vh;overflow:auto}
 .tag{font-size:11px;padding:1px 6px;border-radius:4px;background:#eee;color:#333;margin-left:4px}
 .tag.r1{background:#dfe9f7}.tag.r2{background:#e3f3df}.tag.r3{background:#f7e4d9}
-@media (max-width:600px){td,th{padding:6px 5px}.hidesm{display:none}}
+.bidsInline{display:none;font-size:12px;margin-top:3px}
+@media (max-width:600px){td,th{padding:6px 5px}.hidesm{display:none}.bidsCol{display:none}.bidsInline{display:block}}
 </style>
 </head>
 <body>
@@ -334,9 +336,9 @@ function renderVeiling() {
     h += `<div class="card"><details ${r === c.round ? 'open' : ''}><summary>Ronde ${r} – ${rows.filter(x => x.sold).length} verkocht, ${rows.filter(x => !x.sold).length} ex aequo</summary>`;
     if (!rows.length) h += `<div class="muted">Geen biedingen.</div>`;
     else {
-      h += `<table><thead><tr><th>Renner</th><th>Resultaat</th><th class="hidesm">Alle biedingen</th></tr></thead><tbody>`;
+      h += `<table class="bidsTable"><thead><tr><th>Renner</th><th>Resultaat</th><th class="bidsCol">Alle biedingen</th></tr></thead><tbody>`;
       rows.forEach(x => {
-        h += `<tr><td>${esc(x.rider.name)}</td><td>${x.sold ? `<b>${esc(x.rider.owner)}</b> · ${x.rider.price}M` : `<span class="chip">ex aequo ${x.max}M – blijft vrij</span>`}</td><td class="hidesm muted">${x.list.map(b => `${esc(b.player)} ${b.amount}`).join(' · ')}</td></tr>`;
+        h += `<tr><td>${esc(x.rider.name)}</td><td>${x.sold ? `<b>${esc(x.rider.owner)}</b> · ${x.rider.price}M` : `<span class="chip">ex aequo ${x.max}M – blijft vrij</span>`}<div class="bidsInline muted">${x.list.map(b => `${esc(b.player)} ${b.amount}`).join(' · ')}</div></td><td class="bidsCol muted">${x.list.map(b => `${esc(b.player)} ${b.amount}`).join(' · ')}</td></tr>`;
       });
       h += `</tbody></table>`;
     }
@@ -355,7 +357,7 @@ function renderBidList() {
   const myBidIds = new Set(S.bids.filter(b => b.round === S.config.round && b.player === S.me).map(b => b.rider_id));
   const free = S.riders.filter(r => !r.owner && !myBidIds.has(r.id) && (!q || (r.name + ' ' + r.team).toLowerCase().includes(q)));
   // keep drafted riders on top
-  free.sort((a, b) => (draft[b.id] ? 1 : 0) - (draft[a.id] ? 1 : 0) || a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
+  free.sort((a, b) => (draft[b.id] ? 1 : 0) - (draft[a.id] ? 1 : 0) || (Number(draft[b.id]) || 0) - (Number(draft[a.id]) || 0) || a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
   let h = `<table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th class="num">Bod (M)</th></tr></thead><tbody>`;
   free.slice(0, 250).forEach(r => {
     h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td class="num"><input class="bidin" type="number" min="${S.config.minBid}" step="1" data-id="${esc(r.id)}" value="${draft[r.id] ?? ''}" placeholder="–"></td></tr>`;
@@ -369,6 +371,7 @@ function renderBidList() {
       if (v === '') delete draft[inp.dataset.id]; else draft[inp.dataset.id] = v;
       updateBidBar();
     };
+    inp.onblur = () => { if (document.activeElement?.classList?.contains('bidin')) return; renderBidList(); };
   });
   updateBidBar();
 }
