@@ -53,5 +53,6 @@ http.createServer((req, res) => {
     return;
   }
   if (u.pathname === '/__admin') { res.end(adminToken); return; }
+  if (u.pathname === '/__players') { res.end(JSON.stringify((sheets.Players ? sheets.Players.rows.slice(1) : []).map(r => ({ name: r[0], token: r[1] })))); return; }
   res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(html);
 }).listen(PORT, () => console.log(`mock on http://localhost:${PORT}  admin token: ${adminToken}`));

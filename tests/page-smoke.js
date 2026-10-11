@@ -26,10 +26,12 @@ async function seed() {
   const post = async b => (await fetch(API, { method: 'POST', body: JSON.stringify(b) })).json();
   const adm = await (await fetch('http://localhost:8787/__admin')).text();
   const st = await (await fetch(API + '?action=state')).json();
-  if (st.players.some(p => p.name === 'Flip') && st.riders.some(r => r.owner)) return;
+  if (st.players.some(p => p.name === 'Flip') && st.riders.some(r => r.owner)) { const pl = await (await fetch('http://localhost:8787/__players')).json(); globalThis.__flipToken = pl.find(p => p.name === 'Flip').token; return; }
   await post({ action: 'reset', adminToken: adm, confirm: 'RESET' });
-  const flip = await post({ action: 'addPlayer', adminToken: adm, name: 'Flip' });
-  const jan = await post({ action: 'addPlayer', adminToken: adm, name: 'Jan' });
+  await post({ action: 'addPlayer', adminToken: adm, name: 'Flip' });
+  await post({ action: 'addPlayer', adminToken: adm, name: 'Jan' });
+  const players = await (await fetch('http://localhost:8787/__players')).json();
+  const flip = players.find(p => p.name === 'Flip'), jan = players.find(p => p.name === 'Jan');
   await post({ action: 'importStartlist', adminToken: adm, text: 'EVENEPOEL Remco;Soudal Quick-Step\nLAMPAERT Yves;Soudal Quick-Step\nPOGAČAR Tadej;UAE Team Emirates - XRG\nAYUSO Juan;UAE Team Emirates - XRG' });
   await post({ action: 'openRound', adminToken: adm, deadline: 'za 20:00' });
   await post({ action: 'bid', token: flip.token, round: 1, bids: [{ rider_id: 'pogacar-tadej', amount: 60 }, { rider_id: 'evenepoel-remco', amount: 40 }] });
