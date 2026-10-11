@@ -12,6 +12,7 @@ class Sheet {
   appendRow(r) { this.rows.push(r.slice()); }
   setFrozenRows() {}
   getLastRow() { return this.rows.length; }
+  getLastColumn() { return Math.max(0, ...this.rows.map(r => r.length)); }
   getDataRange() { const s = this; return { getValues: () => s.rows.map(r => r.slice()) }; }
   getRange(r, c, nr, nc) { const s = this; return {
     setValue: v => { s.rows[r - 1][c - 1] = v; },

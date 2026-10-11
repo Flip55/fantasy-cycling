@@ -25,7 +25,7 @@ var HEADERS = {
   Players: ['name', 'token', 'budget_left'],
   Riders:  ['id', 'name', 'team', 'owner', 'price', 'round'],
   Bids:    ['round', 'player', 'rider_id', 'amount', 'timestamp'],
-  Results: ['label', 'rider_id', 'points', 'timestamp'],
+  Results: ['label', 'rider_id', 'points', 'timestamp', 'pcs'],  // points = UCI column, pcs = PCS 'Pnt' column
   Imports: ['label', 'first_at', 'last_at', 'by', 'rows', 'source'],
   Log:     ['timestamp', 'who', 'what']
 };
@@ -35,6 +35,7 @@ var DEFAULT_CONFIG = {
   raceSlug:   'tour-of-guangxi/2026', // part of the PCS URL; imports from other pages are refused
   stages:     6,
   lockHour:   22,      // Brussels time: a label is frozen at this hour on the day of its first import
+  scoring:    'uci',   // 'uci' = UCI points column, 'pcs' = PCS points column ('Pnt'). Both are stored; this picks which counts.
   budget:     100,
   maxRiders:  20,
   minBid:     1,
@@ -103,6 +104,7 @@ function handle_(action, p) {
       case 'openRound':       return admin_(p, openRound_);
       case 'closeRound':      return admin_(p, closeRound_);
       case 'setDeadline':     return admin_(p, setDeadline_);
+      case 'setScoring':      return admin_(p, setScoring_);
       case 'importStartlist': return admin_(p, importStartlist_);
       case 'importResults':   return admin_(p, importResults_);
       case 'deleteResults':   return admin_(p, deleteResults_);
@@ -139,7 +141,8 @@ function getState_(p) {
 
   var pointsByRider = {};
   results.forEach(function (r) {
-    pointsByRider[r.rider_id] = (pointsByRider[r.rider_id] || 0) + Number(r.points);
+    var v = cfg.scoring === 'pcs' ? Number(r.pcs || 0) : Number(r.points || 0);
+    pointsByRider[r.rider_id] = (pointsByRider[r.rider_id] || 0) + v;
   });
 
   // identify caller (optional)
@@ -172,6 +175,7 @@ function getState_(p) {
       roundOpen: roundOpen,
       deadline: cfg.deadline,
       stages: Number(cfg.stages || 6),
+      scoring: cfg.scoring === 'pcs' ? 'pcs' : 'uci',
       lockHour: Number(cfg.lockHour || 22),
       raceSlug: cfg.raceSlug || ''
     },
@@ -299,6 +303,14 @@ function addPlayer_(p, cfg) {
   sheet_(TABS.players).appendRow([name, token, Number(cfg.budget)]);
   log_('admin', 'speler toegevoegd: ' + name);
   return { ok: true, name: name, token: token };
+}
+
+function setScoring_(p) {
+  var v = String(p.scoring || '').toLowerCase();
+  if (v !== 'uci' && v !== 'pcs') return { ok: false, error: 'scoring moet uci of pcs zijn' };
+  setConfig_('scoring', v);
+  log_('admin', 'scoring = ' + v);
+  return { ok: true, scoring: v };
 }
 
 function setDeadline_(p) {
@@ -534,13 +546,14 @@ function submitResults_(p) {
 
 /** Writes results + the Imports log row. Returns the API response. */
 function storeImport_(label, matched, unmatched, by, source, isAdmin) {
-  if (!matched || matched.length === 0) return { ok: false, error: 'Geen renners met UCI-punten herkend op deze pagina.' };
+  if (!matched || matched.length === 0) return { ok: false, error: 'Geen renners met punten herkend op deze pagina.' };
   var cfg = readConfig_();
   deleteLabel_(label);
   var sh = sheet_(TABS.results);
   var nowIso = new Date().toISOString();
-  var rows = matched.map(function (m) { return [label, m.rider_id, m.points, nowIso]; });
-  sh.getRange(sh.getLastRow() + 1, 1, rows.length, 4).setValues(rows);
+  if (sh.getLastColumn() < 5) sh.getRange(1, 5).setValue('pcs');
+  var rows = matched.map(function (m) { return [label, m.rider_id, m.points, nowIso, m.pcs || 0]; });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, 5).setValues(rows);
   // upsert Imports
   var ish = sheet_(TABS.imports);
   var vals = ish.getDataRange().getValues();
@@ -605,18 +618,18 @@ function matchRows_(rows, riders) {
   });
   var matched = [], unmatched = [], seen = {};
   (rows || []).forEach(function (row) {
-    var pts = Number(row.uci);
-    if (!pts || pts <= 0) return;
+    var pts = Number(row.uci) || 0, pcs = Number(row.pcs) || 0;
+    if (pts <= 0 && pcs <= 0) return;
     var k = normName_(row.name);
     var r = byKey[k] || byTokens[k.split(' ').sort().join(' ')];
     if (!r && row.href) {
       var slug = String(row.href).split('/').pop();
       r = byTokens[normName_(slug.replace(/-/g, ' ')).split(' ').sort().join(' ')];
     }
-    if (!r) { unmatched.push(row.name + ' (' + pts + ')'); return; }
+    if (!r) { unmatched.push(row.name + ' (' + (pts || pcs) + ')'); return; }
     if (seen[r.id]) return;
     seen[r.id] = true;
-    matched.push({ rider_id: r.id, name: r.name, points: Math.round(pts) });
+    matched.push({ rider_id: r.id, name: r.name, points: Math.round(pts), pcs: Math.round(pcs) });
   });
   return { matched: matched, unmatched: unmatched };
 }
@@ -697,20 +710,26 @@ function parseResults_(text, riders) {
       return;
     }
     var rest = nline.slice(pos + hit.key.length);
-    var points = null;
-    var simple = rest.match(/^\s*[;,\t]\s*(\d+)\s*$/);
+    var points = null, pcs = 0;
+    var simple = rest.match(/^\s*[;,\t]\s*(\d+)(?:\s*[;,\t]\s*(\d+))?\s*$/);
+    var cells = raw.indexOf('\t') >= 0 ? raw.split('\t').map(function (c) { return c.trim(); }) : null;
+    var ti = -1;
+    if (cells && hit.teamKey) for (var ci = 0; ci < cells.length; ci++) if (normName_(cells[ci]) === hit.teamKey) { ti = ci; break; }
     if (simple) {
-      points = Number(simple[1]);
+      points = Number(simple[1]); pcs = Number(simple[2] || 0);
+    } else if (ti >= 0) {
+      // PCS table paste: columns after Team are UCI, Pnt (either may be blank)
+      points = parseInt(cells[ti + 1], 10) || 0; pcs = parseInt(cells[ti + 2], 10) || 0;
     } else {
       var afterTeam = hit.teamKey && rest.indexOf(hit.teamKey) >= 0 ? rest.slice(rest.indexOf(hit.teamKey) + hit.teamKey.length) : null;
       var src = afterTeam !== null ? afterTeam : rest.replace(/^\s*\d{2}\s/, ' '); // drop age if no team found
-      var num = src.match(/(\d+)/);
-      if (num) points = Number(num[1]);
+      var nums = src.match(/\d+/g) || [];
+      if (nums.length) { points = Number(nums[0]); pcs = Number(nums[1] || 0); }
     }
-    if (points === null || points <= 0) return;
+    if ((points === null || points <= 0) && pcs <= 0) return;
     if (seen[hit.id]) return;
     seen[hit.id] = true;
-    matched.push({ rider_id: hit.id, name: hit.name, points: points });
+    matched.push({ rider_id: hit.id, name: hit.name, points: points || 0, pcs: pcs });
   });
   return { matched: matched, unmatched: unmatched };
 }

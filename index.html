@@ -256,7 +256,7 @@ function renderStand() {
   const st = standings();
   const rs = roundStatus();
   let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${(S.imports || []).length ? 'Verwerkt: ' + S.imports.map(i => esc(i.name) + (i.locked ? ' 🔒' : '')).join(', ') : 'Nog geen resultaten verwerkt.'}</div>
-  <table><thead><tr><th>#</th><th>Speler</th><th class="num">Punten</th><th class="num hidesm">Renners</th><th class="num">Budget over</th></tr></thead><tbody>`;
+  <table><thead><tr><th>#</th><th>Speler</th><th class="num">${S.config.scoring === 'pcs' ? 'PCS-pnt' : 'UCI-pnt'}</th><th class="num hidesm">Renners</th><th class="num">Budget over</th></tr></thead><tbody>`;
   st.forEach((p, i) => {
     h += `<tr class="${p.name === S.me ? 'me' : ''}"><td>${i + 1}</td><td><b>${esc(p.name)}</b></td><td class="num"><b>${p.points}</b></td><td class="num hidesm">${p.riders.length}</td><td class="num">${p.budgetLeft}M</td></tr>`;
   });
@@ -474,7 +474,7 @@ function fmtTime(iso) { if (!iso) return ''; try { return new Date(iso).toLocale
 
 function bookmarkletCode() {
   const site = location.origin + location.pathname;
-  const code = `(function(){var T=[].slice.call(document.querySelectorAll('table')).filter(function(t){return t.offsetParent!==null&&t.tHead&&/\\bUCI\\b/i.test(t.tHead.innerText)});if(!T.length){alert('Geen resultatentabel met UCI-kolom gevonden. Open de uitslag van een etappe of een eindklassement op PCS.');return;}var t=T[0],H=[].map.call(t.tHead.rows[0].cells,function(c){return c.innerText.trim().toLowerCase()});var ir=H.indexOf('rider'),it=H.indexOf('team'),iu=H.indexOf('uci');if(ir<0||iu<0){alert('Kolommen Rider/UCI niet gevonden.');return;}var rows=[];[].forEach.call(t.tBodies[0].rows,function(r){var c=r.cells;if(c.length<=iu)return;var u=parseInt((c[iu].innerText||'').replace(/[^\\d]/g,''),10);if(!u)return;var a=c[ir].querySelector('a');rows.push({name:(a?a.innerText:c[ir].innerText).trim().replace(/\\s+/g,' '),team:it>=0?c[it].innerText.trim():'',uci:u,href:a?a.getAttribute('href'):''})});var p={url:location.href,title:document.title,rows:rows};window.open(${JSON.stringify(site)}+'#import='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(p))))),'_blank');})();`;
+  const code = `(function(){var T=[].slice.call(document.querySelectorAll('table')).filter(function(t){return t.offsetParent!==null&&t.tHead&&/\\b(UCI|Pnt)\\b/i.test(t.tHead.innerText)});if(!T.length){alert('Geen resultatentabel gevonden. Open de uitslag van een etappe of een eindklassement op PCS.');return;}var t=T[0],H=[].map.call(t.tHead.rows[0].cells,function(c){return c.innerText.trim().toLowerCase()});var ir=H.indexOf('rider'),it=H.indexOf('team'),iu=H.indexOf('uci'),ip=H.indexOf('pnt');if(ip<0)ip=H.indexOf('pcs');if(ir<0||(iu<0&&ip<0)){alert('Kolommen Rider/UCI/Pnt niet gevonden.');return;}function n(c){return c?parseInt((c.innerText||'').replace(/[^\\d]/g,''),10)||0:0}var rows=[];[].forEach.call(t.tBodies[0].rows,function(r){var c=r.cells;if(c.length<=ir)return;var u=iu>=0?n(c[iu]):0,q=ip>=0?n(c[ip]):0;if(!u&&!q)return;var a=c[ir].querySelector('a');rows.push({name:(a?a.innerText:c[ir].innerText).trim().replace(/\\s+/g,' '),team:it>=0?c[it].innerText.trim():'',uci:u,pcs:q,href:a?a.getAttribute('href'):''})});var p={url:location.href,title:document.title,rows:rows};window.open(${JSON.stringify(site)}+'#import='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(p))))),'_blank');})();`;
   return 'javascript:' + code;
 }
 
@@ -494,8 +494,9 @@ function renderResultaten() {
       const okRace = !c.raceSlug || (pendingImport.url || '').includes(c.raceSlug);
       h += `<div class="muted">Pagina: <code>${esc(seg)}</code> · ${esc(pendingImport.title || '')}</div>`;
       if (!okRace) h += `<div class="msg err">Dit is geen pagina van ${esc(c.raceName)}.</div>`;
-      h += `<table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th class="num">UCI</th></tr></thead><tbody>`;
-      rows.slice(0, 12).forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td class="num"><b>${r.uci}</b></td></tr>`);
+      const u = c.scoring === 'uci';
+      h += `<table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th class="num">UCI${u ? ' ✓' : ''}</th><th class="num">PCS${u ? '' : ' ✓'}</th></tr></thead><tbody>`;
+      rows.slice(0, 12).forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td class="num">${u ? '<b>' + r.uci + '</b>' : '<span class="muted">' + r.uci + '</span>'}</td><td class="num">${u ? '<span class="muted">' + (r.pcs || 0) + '</span>' : '<b>' + (r.pcs || 0) + '</b>'}</td></tr>`);
       h += `</tbody></table>${rows.length > 12 ? `<div class="muted">… en nog ${rows.length - 12} renners met punten.</div>` : ''}
       <div class="row" style="margin-top:10px"><button class="btn" id="sendImport" ${okRace && rows.length ? '' : 'disabled'}>Verzenden als ${esc(S.me)}</button><button class="btn ghost" id="cancelImport">Annuleren</button></div><div id="importMsg"></div>`;
     }
@@ -503,7 +504,7 @@ function renderResultaten() {
   }
 
   // status per label
-  h += `<div class="card"><h2>Resultaten</h2><div class="muted">Iedereen kan een uitslag doorsturen. Tot <b>${c.lockHour}u</b> (Belgische tijd) op de dag van de eerste import vervangt een nieuwe import de vorige; daarna 🔒.</div>
+  h += `<div class="card"><h2>Resultaten</h2><div class="muted"><b>Puntentelling: ${c.scoring === 'pcs' ? 'PCS-punten' : 'UCI-punten'}</b> (kolom "${c.scoring === 'pcs' ? 'Pnt' : 'UCI'}" op PCS). Iedereen kan een uitslag doorsturen. Tot <b>${c.lockHour}u</b> (Belgische tijd) op de dag van de eerste import vervangt een nieuwe import de vorige; daarna 🔒.</div>
   <table><thead><tr><th>Uitslag</th><th>Status</th><th class="num hidesm">Renners</th></tr></thead><tbody>`;
   allLabels().forEach(([v, n]) => {
     const i = byLabel[v];
@@ -566,7 +567,7 @@ function renderRegels() {
   <li>Het hoogste bod wint en betaalt zijn bod. Bij <b>ex aequo</b> koopt niemand de renner; hij blijft vrij voor de volgende ronde (na ronde ${c.rounds}: hij blijft onverkocht).</li>
   <li>Na elke ronde worden <b>alle biedingen openbaar</b> (wie bood hoeveel op wie).</li>
   <li>Renners die niet starten of uitvallen: pech, geld is weg.</li>
-  <li><b>Punten</b> = alles wat ProCyclingStats als UCI-punten toont (etappe-uitslagen en de eindklassementen: algemeen, punten, berg, jongeren).</li>
+  <li><b>Punten</b> = ${c.scoring === 'pcs' ? 'de <b>PCS-punten</b> (kolom "Pnt" op ProCyclingStats, breder verdeeld dan UCI-punten)' : 'de <b>UCI-punten</b> zoals ProCyclingStats ze toont'} voor de etappe-uitslagen en de eindklassementen (algemeen, punten, berg, jongeren).</li>
   <li><b>Resultaten doorsturen kan iedereen</b>, met de PCS-knop (tab Resultaten). Een uitslag kan opnieuw doorgestuurd worden tot <b>${c.lockHour}u</b> Belgische tijd op de dag van de eerste import; daarna staat hij vast. Latere correcties van UCI of PCS tellen niet.</li>
   <li>Resterend budget heeft geen functie, behalve als <b>tiebreaker</b> in het eindklassement (meer budget over = hoger).</li>
   </ul></div>`;
@@ -593,7 +594,10 @@ function renderAdmin() {
   <button class="btn ghost" data-act="setDeadline" ${!c.roundOpen ? 'disabled' : ''}>Deadline aanpassen</button>
   <button class="btn danger" data-act="closeRound" ${!c.roundOpen ? 'disabled' : ''}>Ronde ${c.round} sluiten &amp; toewijzen</button></div></div>`;
 
-  h += `<div class="card"><h3>4. Resultaten (UCI-punten)</h3><div class="muted">Spelers sturen resultaten normaal zelf door via de tab Resultaten. Hier kan je als notaris een import <b>overschrijven of verwijderen</b>, ook na het slot. Plak de PCS-tabel en kies het label. Verwerkt: ${(S.imports || []).map(i => `<span class="chip">${esc(i.name)}${i.locked ? ' 🔒' : ''}</span>`).join(' ') || 'niets'}</div>
+  h += `<div class="card"><h3>Puntentelling</h3><div class="muted">Beide kolommen worden bij elke import bewaard; deze keuze bepaalt welke telt en kan dus ook achteraf nog gewisseld worden. Nu: <b>${c.scoring === 'pcs' ? 'PCS-punten' : 'UCI-punten'}</b>.</div>
+  <div class="row"><button class="btn ${c.scoring === 'uci' ? '' : 'ghost'}" data-act="setScoring" data-val="uci">UCI-punten</button><button class="btn ${c.scoring === 'pcs' ? '' : 'ghost'}" data-act="setScoring" data-val="pcs">PCS-punten</button></div></div>`;
+
+  h += `<div class="card"><h3>4. Resultaten</h3><div class="muted">Spelers sturen resultaten normaal zelf door via de tab Resultaten. Hier kan je als notaris een import <b>overschrijven of verwijderen</b>, ook na het slot. Plak de PCS-tabel en kies het label. Verwerkt: ${(S.imports || []).map(i => `<span class="chip">${esc(i.name)}${i.locked ? ' 🔒' : ''}</span>`).join(' ') || 'niets'}</div>
   <div class="row"><select id="resLabel">${labelOptions()}</select></div>
   <textarea id="resText" placeholder="plak hier de resultatentabel (kolommen met Rider, Team, UCI)…"></textarea>
   <div class="row"><button class="btn" data-act="importResults">Punten importeren</button><button class="btn ghost" data-act="deleteResults">Label verwijderen</button></div></div>`;
@@ -620,6 +624,7 @@ async function adminAction(act, btn) {
     if (!p.text) p.text = raw;
   }
   if (act === 'openRound' || act === 'setDeadline') p.deadline = $('#deadline').value;
+  if (act === 'setScoring') p.scoring = btn.dataset.val;
   if (act === 'importResults' || act === 'deleteResults') { p.label = $('#resLabel').value; p.text = $('#resText').value; }
   if (act === 'closeRound' && !await ask(`Ronde ${S.config.round} sluiten?\n\nRenners worden toegewezen aan de hoogste bieders en alle biedingen worden openbaar. Daarna kan niemand nog bieden in deze ronde.`, 'Sluiten & toewijzen')) return;
   if (act === 'deleteResults' && !await ask(`Punten van "${p.label}" verwijderen?`, 'Verwijderen')) return;
@@ -633,6 +638,7 @@ async function adminAction(act, btn) {
     if (act === 'closeRound') t = `Ronde ${r.round} gesloten: ${r.sold} renners verkocht, ${r.ties.length} ex aequo.`;
     if (act === 'importResults') t = `${esc(r.name || r.label)}: ${r.matched} renners met punten.` + (r.unmatched.length ? `<br><span class="muted">Niet herkend (${r.unmatched.length}): ${r.unmatched.map(esc).join(' | ')}</span>` : '');
     if (act === 'deleteResults') t = `${r.removed} regels verwijderd.`;
+    if (act === 'setScoring') t = `Puntentelling: ${r.scoring === 'pcs' ? 'PCS-punten' : 'UCI-punten'}.`;
     await load();
     document.querySelector('[data-tab=admin]').click();
     $('#adminMsg').innerHTML = `<div class="msg ok">${t}</div>`;

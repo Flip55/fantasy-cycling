@@ -12,6 +12,7 @@ const PCS_HTML = (seg) => `<!doctype html><html><head><title>Tour of Guangxi 202
 <tr><td>3</td><td>3</td><td>97</td><td><a href="rider/sam-welsford">WELSFORD Sam</a></td><td>30</td><td>Netcompany INEOS</td><td>10</td><td>20</td><td>,,</td></tr>
 <tr><td>4</td><td>4</td><td>13</td><td><a href="rider/kaden-groves">GROVES Kaden</a></td><td>27</td><td>Alpecin - Premier Tech</td><td>5</td><td>10</td><td>,,</td></tr>
 <tr><td>5</td><td>5</td><td>1</td><td><a href="rider/paul-double">DOUBLE Paul</a></td><td>29</td><td>Team Jayco AlUla</td><td></td><td></td><td>,,</td></tr>
+<tr><td>12</td><td>12</td><td>126</td><td><a href="rider/ilan-van-wilder">VAN WILDER Ilan</a></td><td>26</td><td>Soudal Quick-Step</td><td></td><td>8</td><td>,,</td></tr>
 </tbody></table></div></body></html>`;
 
 (async () => {
@@ -52,6 +53,7 @@ const PCS_HTML = (seg) => `<!doctype html><html><head><title>Tour of Guangxi 202
   const preview = await popup.innerText('#importCard');
   if (!/stage-1/.test(preview) || !/MAGNIER Paul/.test(preview) || /HIDDEN/.test(preview)) throw new Error('preview wrong:\n' + preview);
   if (/DOUBLE Paul/.test(preview)) throw new Error('rider without points should not be listed');
+  if (!/VAN WILDER Ilan/.test(preview)) throw new Error('rider with only PCS points should be listed');
   console.log('preview OK');
 
   // 3. send
@@ -62,7 +64,15 @@ const PCS_HTML = (seg) => `<!doctype html><html><head><title>Tour of Guangxi 202
   const pts = Object.fromEntries(st.riders.filter(r => r.points).map(r => [r.name, r.points]));
   if (pts['MAGNIER Paul'] !== 60 || pts['WELSFORD Sam'] !== 10 || pts['KOOIJ Olav'] !== 25) throw new Error('points wrong ' + JSON.stringify(pts));
   if (st.imports[0].label !== 'stage-1' || st.imports[0].by !== 'Flip') throw new Error('imports log wrong');
+  if (pts['VAN WILDER Ilan']) throw new Error('PCS-only rider must have 0 under UCI scoring');
   console.log('points OK, locked =', st.imports[0].locked);
+  // switch scoring to PCS: standings change without re-import
+  const sw = await post({ action: 'setScoring', adminToken: adm, scoring: 'pcs' });
+  const stP = await (await fetch(API + '?action=state')).json();
+  const ptsP = Object.fromEntries(stP.riders.filter(r => r.points).map(r => [r.name, r.points]));
+  if (!sw.ok || stP.config.scoring !== 'pcs' || ptsP['MAGNIER Paul'] !== 40 || ptsP['VAN WILDER Ilan'] !== 8 || ptsP['KOOIJ Olav'] !== 30) throw new Error('pcs scoring wrong ' + JSON.stringify(ptsP));
+  await post({ action: 'setScoring', adminToken: adm, scoring: 'uci' });
+  console.log('scoring switch OK');
 
   // 4. intermediate GC page refused; other race refused
   const bad = await post({ action: 'submitResults', token: jan.token, url: 'https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-1-gc', rows: [{ name: 'MAGNIER Paul', uci: 5 }] });
@@ -72,7 +82,7 @@ const PCS_HTML = (seg) => `<!doctype html><html><head><title>Tour of Guangxi 202
   console.log('refusals OK');
 
   // 5. re-import by another player replaces (before lock), paste fallback works
-  const re = await post({ action: 'submitResults', token: jan.token, url: 'https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-1', rows: [{ name: 'MAGNIER Paul', uci: 60 }, { name: 'KOOIJ Olav', uci: 30 }] });
+  const re = await post({ action: 'submitResults', token: jan.token, url: 'https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-1', rows: [{ name: 'MAGNIER Paul', uci: 60, pcs: 40 }, { name: 'KOOIJ Olav', uci: 30, pcs: 30 }] });
   const st2 = await (await fetch(API + '?action=state')).json();
   const k = st2.riders.find(r => r.name === 'KOOIJ Olav').points;
   const nowBx = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', hour: '2-digit', hour12: false }).format(new Date())) % 24;

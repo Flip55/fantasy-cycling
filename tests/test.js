@@ -69,8 +69,11 @@ const res = `Rnk\tGC\tBIB\tRider\tAge\tTeam\tUCI\tPnt\tTime
 40\t40\t3\tVAN WILDER Ilan\t26\tSoudal Quick-Step\t\t\t,,
 41\t41\t99\tUNKNOWN Rider\t30\tSome Team\t3\t\t,,`;
 let q = parseResults_(res, riders);
-assert.deepStrictEqual(q.matched.map(x => [x.name, x.points]), [['POGAČAR Tadej', 100], ['EVENEPOEL Remco', 70], ['KOOIJ Olav', 40]]);
+assert.deepStrictEqual(q.matched.map(x => [x.name, x.points, x.pcs]), [['POGAČAR Tadej', 100, 40], ['EVENEPOEL Remco', 70, 30], ['KOOIJ Olav', 40, 20]]);
 assert.strictEqual(q.unmatched.length, 1);
+// blank UCI but PCS points present -> uci 0, pcs 8 (not misread as UCI)
+q = parseResults_('12\t12\t3\tVAN WILDER Ilan\t26\tSoudal Quick-Step\t\t8\t3:12:00', riders);
+assert.deepStrictEqual(q.matched.map(x => [x.name, x.points, x.pcs]), [['VAN WILDER Ilan', 0, 8]]);
 // simple format
 q = parseResults_('Kooij Olav;25\nevenepoel remco\t12', riders);
 assert.deepStrictEqual(q.matched.map(x => [x.name, x.points]), [['KOOIJ Olav', 25], ['EVENEPOEL Remco', 12]]);
@@ -105,6 +108,8 @@ const rr = matchRows_([
   { name: 'NOBODY Someone', team: 'x', uci: 3 },
 ], riders.concat([{ id: slug_('MAGNIER Paul'), name: 'MAGNIER Paul', team: 'Soudal Quick-Step' }]));
 assert.deepStrictEqual(rr.matched.map(x => [x.name, x.points]), [['MAGNIER Paul', 60], ['POGAČAR Tadej', 25], ['KOOIJ Olav', 10], ['EVENEPOEL Remco', 5]]);
+const rr2 = matchRows_([{ name: 'VAN WILDER Ilan', uci: 0, pcs: 8 }, { name: 'KOOIJ Olav', uci: 10, pcs: 30 }], riders);
+assert.deepStrictEqual(rr2.matched.map(x => [x.name, x.points, x.pcs]), [['VAN WILDER Ilan', 0, 8], ['KOOIJ Olav', 10, 30]]);
 assert.deepStrictEqual(rr.unmatched, ['NOBODY Someone (3)']);
 
 // lock: first import 11:00 Brussels (09:00Z in October, CEST)
