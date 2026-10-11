@@ -79,3 +79,40 @@ q = parseResults_('1 POGACAR Tadej 28 100', riders);
 assert.deepStrictEqual(q.matched.map(x => x.points), [100]);
 
 console.log('all tests passed');
+
+// ---------- results submission (bookmarklet) ----------
+const { deriveLabel_, normalizeLabel_, matchRows_, isLocked_, labelName_ } = m.exports;
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-3'), { label: 'stage-3' });
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/gc?x=1'), { label: 'gc' });
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-3-gc').error, 'intermediate gc refused');
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/startlist').error);
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/').error);
+assert.strictEqual(normalizeLabel_('Etappe 2'), 'stage-2');
+assert.strictEqual(normalizeLabel_('stage-10'), 'stage-10');
+assert.strictEqual(normalizeLabel_('4'), 'stage-4');
+assert.strictEqual(normalizeLabel_('Eindklassement'), 'gc');
+assert.strictEqual(normalizeLabel_('berg'), 'kom');
+assert.strictEqual(normalizeLabel_('whatever'), null);
+assert.strictEqual(labelName_('stage-6'), 'Etappe 6');
+assert.strictEqual(labelName_('youth'), 'Jongerenklassement');
+
+const rr = matchRows_([
+  { name: 'MAGNIER Paul', team: 'Soudal Quick-Step', uci: 60, href: 'rider/paul-magnier' },
+  { name: 'Pogacar Tadej', team: 'UAE', uci: 25 },               // accent-insensitive exact
+  { name: 'Olav KOOIJ', team: 'x', uci: 10 },                     // token order
+  { name: 'R. EVENEPOEL', team: 'x', uci: 5, href: 'rider/remco-evenepoel' }, // via href
+  { name: 'VAN WILDER Ilan', team: 'x', uci: 0 },                // no points -> ignored
+  { name: 'NOBODY Someone', team: 'x', uci: 3 },
+], riders.concat([{ id: slug_('MAGNIER Paul'), name: 'MAGNIER Paul', team: 'Soudal Quick-Step' }]));
+assert.deepStrictEqual(rr.matched.map(x => [x.name, x.points]), [['MAGNIER Paul', 60], ['POGAČAR Tadej', 25], ['KOOIJ Olav', 10], ['EVENEPOEL Remco', 5]]);
+assert.deepStrictEqual(rr.unmatched, ['NOBODY Someone (3)']);
+
+// lock: first import 11:00 Brussels (09:00Z in October, CEST)
+const first = '2026-10-13T09:00:00Z';
+assert.strictEqual(isLocked_(first, new Date('2026-10-13T19:59:00Z'), 22), false, '21:59 Brussels still open');
+assert.strictEqual(isLocked_(first, new Date('2026-10-13T20:00:00Z'), 22), true, '22:00 Brussels locked');
+assert.strictEqual(isLocked_(first, new Date('2026-10-14T06:00:00Z'), 22), true, 'next day locked');
+assert.strictEqual(isLocked_('2026-10-13T21:30:00Z', new Date('2026-10-13T21:31:00Z'), 22), true, 'first import after 22h is locked immediately');
+assert.strictEqual(isLocked_('', new Date(), 22), false);
+
+console.log('results tests passed');

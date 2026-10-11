@@ -15,8 +15,9 @@ class Sheet {
   getDataRange() { const s = this; return { getValues: () => s.rows.map(r => r.slice()) }; }
   getRange(r, c, nr, nc) { const s = this; return {
     setValue: v => { s.rows[r - 1][c - 1] = v; },
-    setValues: vals => { s.rows = vals.map(x => x.slice()); }
+    setValues: vals => { vals.forEach((row, i) => { while (s.rows.length < r + i) s.rows.push([]); row.forEach((v, j) => { s.rows[r - 1 + i][c - 1 + j] = v; }); }); }
   }; }
+  deleteRow(r) { this.rows.splice(r - 1, 1); }
   clearContents() { this.rows = []; }
 }
 const SpreadsheetApp = { getActiveSpreadsheet: () => ({
@@ -27,14 +28,19 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
 }) };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const ContentService = { MimeType: { JSON: 'json' }, createTextOutput: t => ({ setMimeType: () => t }) };
+const Utilities = { formatDate: (d, tz, fmt) => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(d).map(x => [x.type, x.value]));
+  const H = String(Number(parts.hour) % 24);
+  return fmt.replace('yyyy', parts.year).replace('MM', parts.month).replace('dd', parts.day).replace('HH', H.padStart(2, '0')).replace('H', H).replace('mm', parts.minute);
+} };
 
 const m = {};
-new Function('module', 'require', 'SpreadsheetApp', 'LockService', 'ContentService', src + '\nmodule.exports.setup=setup;module.exports.doGet=doGet;module.exports.doPost=doPost;module.exports.readConfig_=readConfig_;')(m, require, SpreadsheetApp, LockService, ContentService);
+new Function('module', 'require', 'SpreadsheetApp', 'LockService', 'ContentService', 'Utilities', src + '\nmodule.exports.setup=setup;module.exports.doGet=doGet;module.exports.doPost=doPost;module.exports.readConfig_=readConfig_;')(m, require, SpreadsheetApp, LockService, ContentService, Utilities);
 m.exports.setup();
 const adminToken = m.exports.readConfig_().adminToken;
 
 const PORT = Number(process.env.PORT || 8787);
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace('const API_URL = "";', `const API_URL = "http://localhost:${PORT}/api";`);
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/const API_URL = "[^"]*";/, `const API_URL = "http://localhost:${PORT}/api";`);
 
 http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');

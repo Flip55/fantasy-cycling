@@ -88,6 +88,7 @@ details summary{cursor:pointer;font-weight:600;padding:6px 0}
     <button data-tab="teams">Teams</button>
     <button data-tab="veiling">Veiling</button>
     <button data-tab="renners">Renners</button>
+    <button data-tab="resultaten">Resultaten</button>
     <button data-tab="regels">Regels</button>
     <button data-tab="admin" id="adminTab">Admin</button>
   </nav>
@@ -113,6 +114,7 @@ details summary{cursor:pointer;font-weight:600;padding:6px 0}
   <section id="tab-teams" class="hidden"></section>
   <section id="tab-veiling" class="hidden"></section>
   <section id="tab-renners" class="hidden"></section>
+  <section id="tab-resultaten" class="hidden"></section>
   <section id="tab-regels" class="hidden"></section>
   <section id="tab-admin" class="hidden"></section>
 </main>
@@ -166,6 +168,7 @@ function renderAll() {
   renderTeams();
   renderVeiling();
   renderRenners();
+  renderResultaten();
   renderRegels();
   renderAdmin();
 }
@@ -252,7 +255,7 @@ function roundStatus() {
 function renderStand() {
   const st = standings();
   const rs = roundStatus();
-  let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${S.resultLabels.length ? 'Verwerkt: ' + S.resultLabels.map(esc).join(', ') : 'Nog geen resultaten verwerkt.'}</div>
+  let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${(S.imports || []).length ? 'Verwerkt: ' + S.imports.map(i => esc(i.name) + (i.locked ? ' 🔒' : '')).join(', ') : 'Nog geen resultaten verwerkt.'}</div>
   <table><thead><tr><th>#</th><th>Speler</th><th class="num">Punten</th><th class="num hidesm">Renners</th><th class="num">Budget over</th></tr></thead><tbody>`;
   st.forEach((p, i) => {
     h += `<tr class="${p.name === S.me ? 'me' : ''}"><td>${i + 1}</td><td><b>${esc(p.name)}</b></td><td class="num"><b>${p.points}</b></td><td class="num hidesm">${p.riders.length}</td><td class="num">${p.budgetLeft}M</td></tr>`;
@@ -455,6 +458,103 @@ function renderRiderTable() {
   $('#riderTable').innerHTML = h + `</tbody></table>`;
 }
 
+
+/* ---------- Resultaten (player submissions + bookmarklet) ---------- */
+let pendingImport = null;
+
+function allLabels() {
+  const n = S.config.stages || 6;
+  const out = [];
+  for (let i = 1; i <= n; i++) out.push(['stage-' + i, 'Etappe ' + i]);
+  out.push(['gc', 'Eindklassement'], ['points', 'Puntenklassement'], ['kom', 'Bergklassement'], ['youth', 'Jongerenklassement']);
+  return out;
+}
+function labelOptions() { return allLabels().map(([v, n]) => `<option value="${v}">${n}</option>`).join(''); }
+function fmtTime(iso) { if (!iso) return ''; try { return new Date(iso).toLocaleString('nl-BE', { timeZone: 'Europe/Brussels', weekday: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return iso; } }
+
+function bookmarkletCode() {
+  const site = location.origin + location.pathname;
+  const code = `(function(){var T=[].slice.call(document.querySelectorAll('table')).filter(function(t){return t.offsetParent!==null&&t.tHead&&/\\bUCI\\b/i.test(t.tHead.innerText)});if(!T.length){alert('Geen resultatentabel met UCI-kolom gevonden. Open de uitslag van een etappe of een eindklassement op PCS.');return;}var t=T[0],H=[].map.call(t.tHead.rows[0].cells,function(c){return c.innerText.trim().toLowerCase()});var ir=H.indexOf('rider'),it=H.indexOf('team'),iu=H.indexOf('uci');if(ir<0||iu<0){alert('Kolommen Rider/UCI niet gevonden.');return;}var rows=[];[].forEach.call(t.tBodies[0].rows,function(r){var c=r.cells;if(c.length<=iu)return;var u=parseInt((c[iu].innerText||'').replace(/[^\\d]/g,''),10);if(!u)return;var a=c[ir].querySelector('a');rows.push({name:(a?a.innerText:c[ir].innerText).trim().replace(/\\s+/g,' '),team:it>=0?c[it].innerText.trim():'',uci:u,href:a?a.getAttribute('href'):''})});var p={url:location.href,title:document.title,rows:rows};window.open(${JSON.stringify(site)}+'#import='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(p))))),'_blank');})();`;
+  return 'javascript:' + code;
+}
+
+function renderResultaten() {
+  const c = S.config;
+  const byLabel = Object.fromEntries((S.imports || []).map(i => [i.label, i]));
+  let h = '';
+
+  // pending import from the bookmarklet
+  if (pendingImport) {
+    h += `<div class="card" id="importCard"><h2>Resultaten doorsturen</h2>`;
+    if (pendingImport.error) h += `<div class="msg err">${esc(pendingImport.error)}</div>`;
+    else if (!S.me) h += `<div class="msg info">Log eerst in (rechtsboven), dan kan je deze uitslag doorsturen.</div>`;
+    else {
+      const rows = pendingImport.rows || [];
+      const seg = (pendingImport.url || '').replace(/[?#].*$/, '').split('/').pop();
+      const okRace = !c.raceSlug || (pendingImport.url || '').includes(c.raceSlug);
+      h += `<div class="muted">Pagina: <code>${esc(seg)}</code> · ${esc(pendingImport.title || '')}</div>`;
+      if (!okRace) h += `<div class="msg err">Dit is geen pagina van ${esc(c.raceName)}.</div>`;
+      h += `<table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th class="num">UCI</th></tr></thead><tbody>`;
+      rows.slice(0, 12).forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td class="num"><b>${r.uci}</b></td></tr>`);
+      h += `</tbody></table>${rows.length > 12 ? `<div class="muted">… en nog ${rows.length - 12} renners met punten.</div>` : ''}
+      <div class="row" style="margin-top:10px"><button class="btn" id="sendImport" ${okRace && rows.length ? '' : 'disabled'}>Verzenden als ${esc(S.me)}</button><button class="btn ghost" id="cancelImport">Annuleren</button></div><div id="importMsg"></div>`;
+    }
+    h += `</div>`;
+  }
+
+  // status per label
+  h += `<div class="card"><h2>Resultaten</h2><div class="muted">Iedereen kan een uitslag doorsturen. Tot <b>${c.lockHour}u</b> (Belgische tijd) op de dag van de eerste import vervangt een nieuwe import de vorige; daarna 🔒.</div>
+  <table><thead><tr><th>Uitslag</th><th>Status</th><th class="num hidesm">Renners</th></tr></thead><tbody>`;
+  allLabels().forEach(([v, n]) => {
+    const i = byLabel[v];
+    h += `<tr><td>${n}</td><td>${i ? `${i.locked ? '🔒 ' : ''}${esc(fmtTime(i.lastAt))} door <b>${esc(i.by)}</b>${i.locked ? '' : ' <span class="chip">nog aanpasbaar</span>'}` : '<span class="muted">nog niet doorgestuurd</span>'}</td><td class="num hidesm">${i ? i.rows : ''}</td></tr>`;
+  });
+  h += `</tbody></table></div>`;
+
+  // bookmarklet install
+  h += `<div class="card"><h2>De PCS-knop</h2>`;
+  if (!S.me) h += `<div class="muted">Log in om de knop te installeren.</div>`;
+  else h += `<p>Eén klik op de uitslagpagina van PCS stuurt de tabel hierheen; je ziet een voorbeeld en bevestigt. Werkt voor elke etappe en voor de eindklassementen.</p>
+  <h3>Computer</h3><div class="muted">Sleep deze knop naar je bladwijzerbalk: <a id="bml" class="btn" style="display:inline-block;margin:0 6px;text-decoration:none">PCS → Fantasy</a> Open daarna op PCS de uitslag (bv. <code>…/tour-of-guangxi/2026/stage-1</code>) en klik de bladwijzer.</div>
+  <h3>Telefoon</h3><details><summary>iPhone (Safari)</summary><ol class="muted"><li>Klik hieronder op <b>Kopieer code</b>.</li><li>Maak op om het even welke pagina een bladwijzer (deel-icoon → Voeg bladwijzer toe), noem hem "PCS Fantasy".</li><li>Open Bladwijzers → Wijzig → tik de bladwijzer → vervang het adres door de gekopieerde code → Gereed.</li><li>Op de PCS-uitslag: open Bladwijzers en tik "PCS Fantasy".</li></ol></details>
+  <details><summary>Android (Chrome)</summary><ol class="muted"><li>Klik hieronder op <b>Kopieer code</b>.</li><li>Maak een bladwijzer (⋮ → ☆), ga naar Bladwijzers, wijzig hem: naam "pcsfantasy", URL = de gekopieerde code.</li><li>Op de PCS-uitslag: typ "pcsfantasy" in de adresbalk en kies de bladwijzer.</li></ol></details>
+  <div class="row"><button class="btn ghost" id="copyBml">Kopieer code</button><span id="copyMsg" class="muted"></span></div>
+  <h3>Lukt het niet? Plak de tabel</h3><div class="muted">Selecteer op PCS de resultatentabel, kopieer, kies het label en plak hier.</div>
+  <div class="row"><select id="pasteLabel">${labelOptions()}</select></div><textarea id="pasteText" placeholder="plak hier de PCS-tabel…"></textarea>
+  <div class="row"><button class="btn" id="pasteSend">Doorsturen</button></div><div id="pasteMsg"></div>`;
+  h += `</div>`;
+  $('#tab-resultaten').innerHTML = h;
+
+  if (S.me) {
+    const a = $('#bml'); if (a) { a.setAttribute('href', bookmarkletCode()); a.onclick = e => { e.preventDefault(); alert('Niet klikken maar slepen naar je bladwijzerbalk 🙂 (of gebruik "Kopieer code").'); }; }
+    $('#copyBml').onclick = async () => { try { await navigator.clipboard.writeText(bookmarkletCode()); $('#copyMsg').textContent = 'Gekopieerd.'; } catch (e) { prompt('Kopieer deze code:', bookmarkletCode()); } };
+    $('#pasteSend').onclick = async () => {
+      const btn = $('#pasteSend'); btn.disabled = true;
+      try {
+        const r = await api({ action: 'submitResults', token, label: $('#pasteLabel').value, text: $('#pasteText').value }, true);
+        $('#pasteText').value = '';
+        await load(); document.querySelector('[data-tab=resultaten]').click();
+        $('#pasteMsg').innerHTML = importOkMsg(r);
+      } catch (e) { $('#pasteMsg').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; btn.disabled = false; }
+    };
+  }
+  if (pendingImport && S.me && !pendingImport.error) {
+    $('#cancelImport').onclick = () => { pendingImport = null; renderResultaten(); };
+    $('#sendImport').onclick = async () => {
+      const btn = $('#sendImport'); btn.disabled = true;
+      try {
+        const r = await api({ action: 'submitResults', token, url: pendingImport.url, rows: pendingImport.rows }, true);
+        pendingImport = null;
+        await load(); document.querySelector('[data-tab=resultaten]').click();
+        $('#tab-resultaten').insertAdjacentHTML('afterbegin', importOkMsg(r));
+      } catch (e) { $('#importMsg').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; btn.disabled = false; }
+    };
+  }
+}
+function importOkMsg(r) {
+  return `<div class="msg ok"><b>${esc(r.name)}</b>: ${r.matched} renners met punten verwerkt.${r.locked ? ' Deze uitslag staat nu vast.' : ` Aanpasbaar tot ${S.config.lockHour}u.`}${r.unmatched?.length ? `<br><span class="muted">Niet op de startlijst: ${r.unmatched.map(esc).join(', ')}</span>` : ''}</div>`;
+}
+
 /* ---------- Regels ---------- */
 function renderRegels() {
   const c = S.config;
@@ -466,7 +566,8 @@ function renderRegels() {
   <li>Het hoogste bod wint en betaalt zijn bod. Bij <b>ex aequo</b> koopt niemand de renner; hij blijft vrij voor de volgende ronde (na ronde ${c.rounds}: hij blijft onverkocht).</li>
   <li>Na elke ronde worden <b>alle biedingen openbaar</b> (wie bood hoeveel op wie).</li>
   <li>Renners die niet starten of uitvallen: pech, geld is weg.</li>
-  <li><b>Punten</b> = alles wat ProCyclingStats als UCI-punten toont (etappes, eindklassement, nevenklassementen). Ze worden om 22u verwerkt zoals PCS ze op dat moment toont; latere correcties van UCI of PCS tellen niet.</li>
+  <li><b>Punten</b> = alles wat ProCyclingStats als UCI-punten toont (etappe-uitslagen en de eindklassementen: algemeen, punten, berg, jongeren).</li>
+  <li><b>Resultaten doorsturen kan iedereen</b>, met de PCS-knop (tab Resultaten). Een uitslag kan opnieuw doorgestuurd worden tot <b>${c.lockHour}u</b> Belgische tijd op de dag van de eerste import; daarna staat hij vast. Latere correcties van UCI of PCS tellen niet.</li>
   <li>Resterend budget heeft geen functie, behalve als <b>tiebreaker</b> in het eindklassement (meer budget over = hoger).</li>
   </ul></div>`;
 }
@@ -492,8 +593,8 @@ function renderAdmin() {
   <button class="btn ghost" data-act="setDeadline" ${!c.roundOpen ? 'disabled' : ''}>Deadline aanpassen</button>
   <button class="btn danger" data-act="closeRound" ${!c.roundOpen ? 'disabled' : ''}>Ronde ${c.round} sluiten &amp; toewijzen</button></div></div>`;
 
-  h += `<div class="card"><h3>4. Resultaten (UCI-punten)</h3><div class="muted">Elke avond om 22u: open op PCS de resultaten (etappe, en op het einde GC + nevenklassementen), kopieer de tabel en plak ze hier met een label. Hetzelfde label opnieuw importeren <b>vervangt</b> die import. Verwerkt: ${S.resultLabels.map(l => `<span class="chip">${esc(l)}</span>`).join(' ') || 'niets'}</div>
-  <div class="row"><input type="text" id="resLabel" placeholder="label, bv. Etappe 1" style="width:200px"></div>
+  h += `<div class="card"><h3>4. Resultaten (UCI-punten)</h3><div class="muted">Spelers sturen resultaten normaal zelf door via de tab Resultaten. Hier kan je als notaris een import <b>overschrijven of verwijderen</b>, ook na het slot. Plak de PCS-tabel en kies het label. Verwerkt: ${(S.imports || []).map(i => `<span class="chip">${esc(i.name)}${i.locked ? ' 🔒' : ''}</span>`).join(' ') || 'niets'}</div>
+  <div class="row"><select id="resLabel">${labelOptions()}</select></div>
   <textarea id="resText" placeholder="plak hier de resultatentabel (kolommen met Rider, Team, UCI)…"></textarea>
   <div class="row"><button class="btn" data-act="importResults">Punten importeren</button><button class="btn ghost" data-act="deleteResults">Label verwijderen</button></div></div>`;
 
@@ -530,7 +631,7 @@ async function adminAction(act, btn) {
     if (act === 'addPlayer') t = `Speler <b>${esc(r.name)}</b> toegevoegd. Code: <b style="font-size:18px;letter-spacing:2px">${esc(r.token)}</b>`;
     if (act === 'importStartlist') t = `${r.parsed} renners herkend, ${r.added} nieuw toegevoegd.` + (r.sample?.length ? ` Bv. ${esc(r.sample[0].name)} (${esc(r.sample[0].team)})` : '');
     if (act === 'closeRound') t = `Ronde ${r.round} gesloten: ${r.sold} renners verkocht, ${r.ties.length} ex aequo.`;
-    if (act === 'importResults') t = `"${esc(r.label)}": ${r.matched} renners met punten.` + (r.unmatched.length ? `<br><span class="muted">Niet herkend (${r.unmatched.length}): ${r.unmatched.map(esc).join(' | ')}</span>` : '');
+    if (act === 'importResults') t = `${esc(r.name || r.label)}: ${r.matched} renners met punten.` + (r.unmatched.length ? `<br><span class="muted">Niet herkend (${r.unmatched.length}): ${r.unmatched.map(esc).join(' | ')}</span>` : '');
     if (act === 'deleteResults') t = `${r.removed} regels verwijderd.`;
     await load();
     document.querySelector('[data-tab=admin]').click();
@@ -547,10 +648,15 @@ $('#nav').querySelectorAll('button').forEach(b => b.onclick = () => {
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + b.dataset.tab));
   location.hash = b.dataset.tab;
 });
-if (location.hash) { const b = $(`#nav [data-tab=${location.hash.slice(1)}]`); if (b) b.click(); }
+if (location.hash.startsWith('#import=')) {
+  try { pendingImport = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(location.hash.slice(8)))))); }
+  catch (e) { pendingImport = { error: 'Kon de gegevens van de knop niet lezen.' }; }
+  history.replaceState(null, '', location.pathname + '#resultaten');
+}
+if (/^#[a-z]+$/.test(location.hash)) { const b = $(`#nav [data-tab=${location.hash.slice(1)}]`); if (b) b.click(); }
 load();
 setInterval(() => {
-  const busy = Object.keys(draft).length || location.hash === '#admin' || [...document.querySelectorAll('textarea')].some(t => t.value);
+  const busy = Object.keys(draft).length || pendingImport || location.hash === '#admin' || [...document.querySelectorAll('textarea')].some(t => t.value);
   if (!busy && document.visibilityState === 'visible') load();
 }, 60000);
 </script>

@@ -16,6 +16,7 @@ var TABS = {
   riders:  'Riders',
   bids:    'Bids',
   results: 'Results',
+  imports: 'Imports',
   log:     'Log'
 };
 
@@ -25,11 +26,15 @@ var HEADERS = {
   Riders:  ['id', 'name', 'team', 'owner', 'price', 'round'],
   Bids:    ['round', 'player', 'rider_id', 'amount', 'timestamp'],
   Results: ['label', 'rider_id', 'points', 'timestamp'],
+  Imports: ['label', 'first_at', 'last_at', 'by', 'rows', 'source'],
   Log:     ['timestamp', 'who', 'what']
 };
 
 var DEFAULT_CONFIG = {
   raceName:   'Tour of Guangxi 2026',
+  raceSlug:   'tour-of-guangxi/2026', // part of the PCS URL; imports from other pages are refused
+  stages:     6,
+  lockHour:   22,      // Brussels time: a label is frozen at this hour on the day of its first import
   budget:     100,
   maxRiders:  20,
   minBid:     1,
@@ -92,6 +97,7 @@ function handle_(action, p) {
     switch (action) {
       case 'state':           return getState_(p);
       case 'bid':             return placeBids_(p);
+      case 'submitResults':   return submitResults_(p);
       // admin
       case 'addPlayer':       return admin_(p, addPlayer_);
       case 'openRound':       return admin_(p, openRound_);
@@ -164,7 +170,10 @@ function getState_(p) {
       rounds: Number(cfg.rounds),
       round: round,
       roundOpen: roundOpen,
-      deadline: cfg.deadline
+      deadline: cfg.deadline,
+      stages: Number(cfg.stages || 6),
+      lockHour: Number(cfg.lockHour || 22),
+      raceSlug: cfg.raceSlug || ''
     },
     players: players.map(function (x) {
       return { name: x.name, budgetLeft: Number(x.budget_left) };
@@ -179,7 +188,11 @@ function getState_(p) {
       };
     }),
     bids: publicBids,
-    resultLabels: uniq_(results.map(function (r) { return r.label; }))
+    resultLabels: uniq_(results.map(function (r) { return r.label; })),
+    imports: readRows_(TABS.imports).map(function (i) {
+      return { label: i.label, name: labelName_(i.label), firstAt: i.first_at, lastAt: i.last_at, by: i.by, rows: Number(i.rows), source: i.source,
+               locked: isLocked_(i.first_at, new Date(), Number(cfg.lockHour || 22)) };
+    })
   };
 }
 
@@ -466,28 +479,177 @@ function cleanName_(s) {
 /* ------------------------------------------------------------------ */
 
 /**
- * p.label = e.g. "Etappe 1"  (unique per import; re-importing a label replaces it)
- * p.text  = copy/paste of the PCS result table (columns incl. Rider, Team, UCI)
- *           or simple lines "SURNAME Firstname;points"
+ * Admin import (paste). Bypasses the lock and the race check. p = { label, text }
  */
 function importResults_(p) {
-  var label = String(p.label || '').trim();
-  if (!label) return { ok: false, error: 'label ontbreekt (bv. "Etappe 1")' };
   var riders = readRows_(TABS.riders);
+  var label = normalizeLabel_(p.label);
+  if (!label) return { ok: false, error: 'Onbekend label. Gebruik stage-1 … stage-N, gc, points, kom of youth.' };
   var parsed = parseResults_(String(p.text || ''), riders);
-  if (parsed.matched.length === 0) return { ok: false, error: 'Geen renners met punten herkend.' };
+  return storeImport_(label, parsed.matched, parsed.unmatched, 'admin', 'paste', true);
+}
 
+/**
+ * Player import. p = { token, url, rows:[{name,team,uci,href}] }  (bookmarklet)
+ *             or  { token, label, text }                            (paste fallback)
+ * Rules: valid player; page must belong to this race; only final classifications
+ * (no intermediate GC tabs); label frozen after lockHour on the day of its first import.
+ */
+function submitResults_(p) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var cfg = readConfig_();
+    var players = readRows_(TABS.players);
+    var me = players.filter(function (x) { return x.token === p.token; })[0];
+    if (!me) return { ok: false, error: 'Onbekende speler/code. Log eerst in op de site.' };
+    var riders = readRows_(TABS.riders);
+    var label, matched, unmatched, source;
+    if (p.rows) {
+      var url = String(p.url || '');
+      if (cfg.raceSlug && url.indexOf(cfg.raceSlug) < 0) {
+        return { ok: false, error: 'Dit is geen pagina van ' + cfg.raceName + ' (verwacht "' + cfg.raceSlug + '" in de URL).' };
+      }
+      var d = deriveLabel_(url);
+      if (d.error) return { ok: false, error: d.error };
+      label = d.label; source = url;
+      var m = matchRows_(p.rows, riders);
+      matched = m.matched; unmatched = m.unmatched;
+    } else {
+      label = normalizeLabel_(p.label);
+      if (!label) return { ok: false, error: 'Kies een geldig label.' };
+      source = 'paste';
+      var parsed = parseResults_(String(p.text || ''), riders);
+      matched = parsed.matched; unmatched = parsed.unmatched;
+    }
+    var existing = readRows_(TABS.imports).filter(function (i) { return i.label === label; })[0];
+    if (existing && isLocked_(existing.first_at, new Date(), Number(cfg.lockHour || 22))) {
+      return { ok: false, error: labelName_(label) + ' is vastgezet (eerste import ' + fmtBrussels_(existing.first_at) + ', slot om ' + cfg.lockHour + 'u). Wijzigingen zijn niet meer mogelijk.' };
+    }
+    return storeImport_(label, matched, unmatched, me.name, source, false);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Writes results + the Imports log row. Returns the API response. */
+function storeImport_(label, matched, unmatched, by, source, isAdmin) {
+  if (!matched || matched.length === 0) return { ok: false, error: 'Geen renners met UCI-punten herkend op deze pagina.' };
+  var cfg = readConfig_();
   deleteLabel_(label);
   var sh = sheet_(TABS.results);
-  var now = new Date().toISOString();
-  parsed.matched.forEach(function (m) { sh.appendRow([label, m.rider_id, m.points, now]); });
-  log_('admin', 'resultaten "' + label + '": ' + parsed.matched.length + ' renners');
-  return { ok: true, label: label, matched: parsed.matched.length, unmatched: parsed.unmatched.slice(0, 30) };
+  var nowIso = new Date().toISOString();
+  var rows = matched.map(function (m) { return [label, m.rider_id, m.points, nowIso]; });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, 4).setValues(rows);
+  // upsert Imports
+  var ish = sheet_(TABS.imports);
+  var vals = ish.getDataRange().getValues();
+  var found = false, firstAt = nowIso;
+  for (var i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === label) {
+      firstAt = String(vals[i][1]) || nowIso;
+      ish.getRange(i + 1, 1, 1, 6).setValues([[label, firstAt, nowIso, by, matched.length, source]]);
+      found = true; break;
+    }
+  }
+  if (!found) ish.appendRow([label, nowIso, nowIso, by, matched.length, source]);
+  log_(by, 'resultaten ' + label + ': ' + matched.length + ' renners' + (isAdmin ? ' (admin)' : ''));
+  return { ok: true, label: label, name: labelName_(label), matched: matched.length, unmatched: (unmatched || []).slice(0, 30),
+           locked: isLocked_(firstAt, new Date(), Number(cfg.lockHour || 22)), firstAt: firstAt };
+}
+
+/**
+ * Pure. PCS URL -> label.  .../race/tour-of-guangxi/2026/stage-3 -> stage-3
+ * Final classifications: /gc /points /kom /youth. Intermediate tabs (stage-3-gc) are refused.
+ */
+function deriveLabel_(url) {
+  var path = String(url || '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+  var seg = path.split('/').pop() || '';
+  var m;
+  if ((m = seg.match(/^stage-(\d+)$/))) return { label: 'stage-' + Number(m[1]) };
+  if (/^(gc|points|kom|youth)$/.test(seg)) return { label: seg };
+  if (/^stage-\d+-(gc|points|kom|youth|teams)$/.test(seg)) {
+    return { error: 'Dit is een tussenstand (' + seg + '). Enkel de etappe-uitslag (stage-N) en de eindklassementen (gc, points, kom, youth) tellen.' };
+  }
+  if (/^(teams|stages|startlist|result|results)$/.test(seg) || !seg) {
+    return { error: 'Open de uitslag van een etappe (URL eindigt op /stage-N) of een eindklassement (/gc, /points, /kom, /youth).' };
+  }
+  return { error: 'Onbekende pagina "' + seg + '". Verwacht /stage-N, /gc, /points, /kom of /youth.' };
+}
+
+/** Pure. Accepts "stage-3", "Etappe 3", "3", "gc", "Eindklassement", ... */
+function normalizeLabel_(input) {
+  var s = String(input || '').trim().toLowerCase();
+  var m;
+  if ((m = s.match(/^(?:stage|etappe|rit)?[\s-]*(\d+)$/))) return 'stage-' + Number(m[1]);
+  if (/^(gc|eindklassement|algemeen)$/.test(s)) return 'gc';
+  if (/^(points|punten|puntenklassement|groen)$/.test(s)) return 'points';
+  if (/^(kom|berg|bergklassement|bolletjes)$/.test(s)) return 'kom';
+  if (/^(youth|jongeren|jongerenklassement|wit)$/.test(s)) return 'youth';
+  return null;
+}
+
+function labelName_(label) {
+  var m;
+  if ((m = String(label).match(/^stage-(\d+)$/))) return 'Etappe ' + m[1];
+  return { gc: 'Eindklassement', points: 'Puntenklassement', kom: 'Bergklassement', youth: 'Jongerenklassement' }[label] || label;
+}
+
+/** Pure. Rows from the bookmarklet -> matched riders (exact name, then token-set, then PCS href). */
+function matchRows_(rows, riders) {
+  var byKey = {}, byTokens = {};
+  riders.forEach(function (r) {
+    var k = normName_(r.name);
+    byKey[k] = r;
+    byTokens[k.split(' ').sort().join(' ')] = r;
+  });
+  var matched = [], unmatched = [], seen = {};
+  (rows || []).forEach(function (row) {
+    var pts = Number(row.uci);
+    if (!pts || pts <= 0) return;
+    var k = normName_(row.name);
+    var r = byKey[k] || byTokens[k.split(' ').sort().join(' ')];
+    if (!r && row.href) {
+      var slug = String(row.href).split('/').pop();
+      r = byTokens[normName_(slug.replace(/-/g, ' ')).split(' ').sort().join(' ')];
+    }
+    if (!r) { unmatched.push(row.name + ' (' + pts + ')'); return; }
+    if (seen[r.id]) return;
+    seen[r.id] = true;
+    matched.push({ rider_id: r.id, name: r.name, points: Math.round(pts) });
+  });
+  return { matched: matched, unmatched: unmatched };
+}
+
+/** Brussels date + hour of a Date. Uses Utilities in Apps Script, Intl in node. */
+function brussels_(d) {
+  if (typeof Utilities !== 'undefined') {
+    return { date: Utilities.formatDate(d, 'Europe/Brussels', 'yyyy-MM-dd'), hour: Number(Utilities.formatDate(d, 'Europe/Brussels', 'H')) };
+  }
+  var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit' }).formatToParts(d);
+  var g = {}; parts.forEach(function (x) { g[x.type] = x.value; });
+  return { date: g.year + '-' + g.month + '-' + g.day, hour: Number(g.hour) % 24 };
+}
+
+/** Pure. Locked once Brussels time reaches lockHour on the day of the first import (or any later day). */
+function isLocked_(firstAtIso, now, lockHour) {
+  if (!firstAtIso) return false;
+  var f = brussels_(new Date(firstAtIso)), n = brussels_(now);
+  return n.date > f.date || (n.date === f.date && n.hour >= lockHour);
+}
+
+function fmtBrussels_(iso) {
+  if (!iso) return '';
+  if (typeof Utilities !== 'undefined') return Utilities.formatDate(new Date(iso), 'Europe/Brussels', 'dd/MM HH:mm');
+  return new Date(iso).toLocaleString('nl-BE', { timeZone: 'Europe/Brussels' });
 }
 
 function deleteResults_(p) {
-  var label = String(p.label || '').trim();
+  var label = normalizeLabel_(p.label) || String(p.label || '').trim();
   var n = deleteLabel_(label);
+  var ish = sheet_(TABS.imports);
+  var iv = ish.getDataRange().getValues();
+  for (var i = iv.length - 1; i >= 1; i--) if (String(iv[i][0]) === label) ish.deleteRow(i + 1);
   log_('admin', 'resultaten verwijderd: "' + label + '" (' + n + ')');
   return { ok: true, removed: n };
 }
@@ -560,7 +722,7 @@ function parseResults_(text, riders) {
 function reset_(p, cfg) {
   if (p.confirm !== 'RESET') return { ok: false, error: 'bevestig met confirm: "RESET"' };
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  [TABS.bids, TABS.results].forEach(function (n) {
+  [TABS.bids, TABS.results, TABS.imports].forEach(function (n) {
     var sh = ss.getSheetByName(n);
     sh.clearContents();
     sh.appendRow(HEADERS[n]);
@@ -585,7 +747,9 @@ function reset_(p, cfg) {
 /* ------------------------------------------------------------------ */
 
 function sheet_(name) {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(name);
+  if (!sh && HEADERS[name]) { sh = ss.insertSheet(name); sh.appendRow(HEADERS[name]); sh.setFrozenRows(1); }
   if (!sh) throw new Error('Tab ontbreekt: ' + name + ' (run setup())');
   return sh;
 }
@@ -656,5 +820,5 @@ function uniq_(arr) {
 
 // Exports for the node test harness (ignored by Apps Script)
 if (typeof module !== 'undefined') {
-  module.exports = { validateBids_: validateBids_, resolveRound_: resolveRound_, parseStartlist_: parseStartlist_, parseResults_: parseResults_, normName_: normName_, slug_: slug_ };
+  module.exports = { validateBids_: validateBids_, resolveRound_: resolveRound_, parseStartlist_: parseStartlist_, parseResults_: parseResults_, normName_: normName_, slug_: slug_, deriveLabel_: deriveLabel_, normalizeLabel_: normalizeLabel_, matchRows_: matchRows_, isLocked_: isLocked_, labelName_: labelName_ };
 }
