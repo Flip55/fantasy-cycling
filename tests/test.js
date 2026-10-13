@@ -84,12 +84,23 @@ assert.deepStrictEqual(q.matched.map(x => x.points), [100]);
 console.log('all tests passed');
 
 // ---------- results submission (bookmarklet) ----------
-const { deriveLabel_, normalizeLabel_, matchRows_, isLocked_, labelName_ } = m.exports;
+const { deriveLabel_, isRacePage_, normalizeLabel_, matchRows_, isLocked_, labelName_ } = m.exports;
 assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-3'), { label: 'stage-3' });
 assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/gc?x=1'), { label: 'gc' });
 assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-3-gc').error, 'intermediate gc refused');
 assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/startlist').error);
 assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/').error);
+// flat PCS URLs (October 2026 layout)
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-stage-1'), { label: 'stage-1' });
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-gc'), { label: 'gc' });
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-kom/'), { label: 'kom' });
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-stage-3-gc').error, 'flat intermediate gc refused');
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-startlist').error);
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026').error);
+assert.ok(isRacePage_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-stage-1', 'tour-of-guangxi/2026'));
+assert.ok(isRacePage_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-1', 'tour-of-guangxi/2026'));
+assert.ok(!isRacePage_('https://www.procyclingstats.com/race/tour-of-guangxi-2025-stage-1', 'tour-of-guangxi/2026'));
+assert.ok(!isRacePage_('https://www.procyclingstats.com/race/il-lombardia-2026-result', 'tour-of-guangxi/2026'));
 assert.strictEqual(normalizeLabel_('Etappe 2'), 'stage-2');
 assert.strictEqual(normalizeLabel_('stage-10'), 'stage-10');
 assert.strictEqual(normalizeLabel_('4'), 'stage-4');

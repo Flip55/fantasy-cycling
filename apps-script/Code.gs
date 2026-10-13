@@ -519,7 +519,7 @@ function submitResults_(p) {
     var label, matched, unmatched, source;
     if (p.rows) {
       var url = String(p.url || '');
-      if (cfg.raceSlug && url.indexOf(cfg.raceSlug) < 0) {
+      if (!isRacePage_(url, cfg.raceSlug)) {
         return { ok: false, error: 'Dit is geen pagina van ' + cfg.raceName + ' (verwacht "' + cfg.raceSlug + '" in de URL).' };
       }
       var d = deriveLabel_(url);
@@ -578,16 +578,24 @@ function storeImport_(label, matched, unmatched, by, source, isAdmin) {
 function deriveLabel_(url) {
   var path = String(url || '').replace(/[?#].*$/, '').replace(/\/+$/, '');
   var seg = path.split('/').pop() || '';
+  // PCS uses both ".../tour-of-guangxi/2026/stage-1" and the flat ".../tour-of-guangxi-2026-stage-1".
   var m;
-  if ((m = seg.match(/^stage-(\d+)$/))) return { label: 'stage-' + Number(m[1]) };
-  if (/^(gc|points|kom|youth)$/.test(seg)) return { label: seg };
-  if (/^stage-\d+-(gc|points|kom|youth|teams)$/.test(seg)) {
-    return { error: 'Dit is een tussenstand (' + seg + '). Enkel de etappe-uitslag (stage-N) en de eindklassementen (gc, points, kom, youth) tellen.' };
+  if ((m = seg.match(/(?:^|-)stage-(\d+)-(gc|points|kom|youth|teams)$/))) {
+    return { error: 'Dit is een tussenstand (stage-' + m[1] + '-' + m[2] + '). Enkel de etappe-uitslag (stage-N) en de eindklassementen (gc, points, kom, youth) tellen.' };
   }
-  if (/^(teams|stages|startlist|result|results)$/.test(seg) || !seg) {
-    return { error: 'Open de uitslag van een etappe (URL eindigt op /stage-N) of een eindklassement (/gc, /points, /kom, /youth).' };
+  if ((m = seg.match(/(?:^|-)stage-(\d+)$/))) return { label: 'stage-' + Number(m[1]) };
+  if ((m = seg.match(/(?:^|-\d{4}-)(gc|points|kom|youth)$/))) return { label: m[1] };
+  if (/(?:^|-)(teams|stages|startlist|result|results)$/.test(seg) || !seg || /^\d{4}$/.test(seg)) {
+    return { error: 'Open de uitslag van een etappe (URL eindigt op stage-N) of een eindklassement (gc, points, kom, youth).' };
   }
-  return { error: 'Onbekende pagina "' + seg + '". Verwacht /stage-N, /gc, /points, /kom of /youth.' };
+  return { error: 'Onbekende pagina "' + seg + '". Verwacht stage-N, gc, points, kom of youth.' };
+}
+
+/** Pure. Slug "tour-of-guangxi/2026" matches both ".../tour-of-guangxi/2026/..." and ".../tour-of-guangxi-2026-...". */
+function isRacePage_(url, raceSlug) {
+  if (!raceSlug) return true;
+  var norm = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); };
+  return norm(url).indexOf(norm(raceSlug)) >= 0;
 }
 
 /** Pure. Accepts "stage-3", "Etappe 3", "3", "gc", "Eindklassement", ... */
@@ -839,5 +847,5 @@ function uniq_(arr) {
 
 // Exports for the node test harness (ignored by Apps Script)
 if (typeof module !== 'undefined') {
-  module.exports = { validateBids_: validateBids_, resolveRound_: resolveRound_, parseStartlist_: parseStartlist_, parseResults_: parseResults_, normName_: normName_, slug_: slug_, deriveLabel_: deriveLabel_, normalizeLabel_: normalizeLabel_, matchRows_: matchRows_, isLocked_: isLocked_, labelName_: labelName_ };
+  module.exports = { validateBids_: validateBids_, resolveRound_: resolveRound_, parseStartlist_: parseStartlist_, parseResults_: parseResults_, normName_: normName_, slug_: slug_, deriveLabel_: deriveLabel_, isRacePage_: isRacePage_, normalizeLabel_: normalizeLabel_, matchRows_: matchRows_, isLocked_: isLocked_, labelName_: labelName_ };
 }
