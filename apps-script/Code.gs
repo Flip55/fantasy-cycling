@@ -177,7 +177,8 @@ function getState_(p) {
       stages: Number(cfg.stages || 6),
       scoring: cfg.scoring === 'pcs' ? 'pcs' : 'uci',
       lockHour: Number(cfg.lockHour || 22),
-      raceSlug: cfg.raceSlug || ''
+      raceSlug: cfg.raceSlug || '',
+      backend: 'v3'
     },
     players: players.map(function (x) {
       return { name: x.name, budgetLeft: Number(x.budget_left) };
