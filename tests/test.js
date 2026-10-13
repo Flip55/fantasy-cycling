@@ -91,6 +91,8 @@ assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/202
 assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/startlist').error);
 assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/').error);
 // flat PCS URLs (October 2026 layout)
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-stage-1/results'), { label: 'stage-1' });
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-gc/result'), { label: 'gc' });
 assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-stage-1'), { label: 'stage-1' });
 assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-gc'), { label: 'gc' });
 assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-kom/'), { label: 'kom' });

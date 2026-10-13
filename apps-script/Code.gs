@@ -576,7 +576,7 @@ function storeImport_(label, matched, unmatched, by, source, isAdmin) {
  * Final classifications: /gc /points /kom /youth. Intermediate tabs (stage-3-gc) are refused.
  */
 function deriveLabel_(url) {
-  var path = String(url || '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+  var path = String(url || '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\/results?$/, '');
   var seg = path.split('/').pop() || '';
   // PCS uses both ".../tour-of-guangxi/2026/stage-1" and the flat ".../tour-of-guangxi-2026-stage-1".
   var m;
