@@ -37,6 +37,15 @@ th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertic
 th{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 tr.me td{background:#fff6ef;color:var(--ink)}
+tr.expandable{cursor:pointer}
+tr.expandable:hover td{background:#faf8f3}
+tr.expandable.me:hover td{background:#fff0e3}
+.caret{display:inline-block;margin-left:6px;color:var(--muted);font-size:12px;transition:transform .15s}
+tr.open .caret{transform:rotate(90deg)}
+tr.detail td{background:#faf8f3;padding-top:4px;padding-bottom:8px;border-top:0}
+tr.me+tr.detail td{background:#fff6ef}
+.scorers{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px}
+.scorers .n{color:var(--muted)}
 .chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:500}
 .chip.gold{background:#f6e7bd}
 button.btn,.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:8px;padding:9px 14px;font:600 14px Inter,sans-serif;cursor:pointer}
@@ -258,18 +267,34 @@ function renderStand() {
   let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${(S.imports || []).length ? 'Verwerkt: ' + S.imports.map(i => esc(i.name) + (i.locked ? ' 🔒' : '')).join(', ') : 'Nog geen resultaten verwerkt.'}</div>
   <table><thead><tr><th>#</th><th>Speler</th><th class="num">${S.config.scoring === 'pcs' ? 'PCS-pnt' : 'UCI-pnt'}</th><th class="num hidesm">Renners</th><th class="num">Budget over</th></tr></thead><tbody>`;
   st.forEach((p, i) => {
-    h += `<tr class="${p.name === S.me ? 'me' : ''}"><td>${i + 1}</td><td><b>${esc(p.name)}</b></td><td class="num"><b>${p.points}</b></td><td class="num hidesm">${p.riders.length}</td><td class="num">${p.budgetLeft}M</td></tr>`;
+    const scorers = [...p.riders].filter(r => r.points > 0).sort((a, b) => b.points - a.points);
+    const canOpen = scorers.length > 0;
+    h += `<tr class="${p.name === S.me ? 'me' : ''} ${canOpen ? 'expandable' : ''}" data-player="${esc(p.name)}"><td>${i + 1}</td><td><b>${esc(p.name)}</b>${canOpen ? '<span class="caret">▸</span>' : ''}</td><td class="num"><b>${p.points}</b></td><td class="num hidesm">${p.riders.length}</td><td class="num">${p.budgetLeft}M</td></tr>`;
+    if (canOpen) {
+      h += `<tr class="detail hidden" data-detail="${esc(p.name)}"><td></td><td colspan="4"><div class="scorers">` +
+        scorers.map(r => `<span><span class="n">${esc(r.name)}</span> <b>${r.points}</b></span>`).join('') +
+        `</div></td></tr>`;
+    }
   });
-  h += `</tbody></table></div>`;
+  h += `</tbody></table><div class="muted" style="font-size:12px;margin-top:6px">Klik op een speler om te zien wie de punten scoorde.</div></div>`;
   // top scorers
   const top = [...S.riders].filter(r => r.points > 0).sort((a, b) => b.points - a.points).slice(0, 10);
   if (top.length) {
-    h += `<div class="card"><h2>Topscorers</h2><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th></tr></thead><tbody>`;
-    top.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">–</span>'}</td><td class="num"><b>${r.points}</b></td></tr>`);
+    h += `<div class="card"><h2>Topscorers</h2><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th><th class="num" title="punten per miljoen">Pnt/M</th></tr></thead><tbody>`;
+    top.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">–</span>'}</td><td class="num"><b>${r.points}</b></td><td class="num muted">${ppm(r)}</td></tr>`);
     h += `</tbody></table></div>`;
   }
   $('#tab-stand').innerHTML = h;
+  $('#tab-stand').querySelectorAll('tr.expandable').forEach(tr => tr.onclick = () => {
+    const d = $('#tab-stand').querySelector(`tr[data-detail="${CSS.escape(tr.dataset.player)}"]`);
+    if (!d) return;
+    d.classList.toggle('hidden');
+    tr.classList.toggle('open', !d.classList.contains('hidden'));
+  });
 }
+// points per million: a rider's return on the price paid; '–' for unsold riders
+function ppmVal(r) { return (r.owner && r.price) ? r.points / r.price : -1; }
+function ppm(r) { return ppmVal(r) < 0 ? '–' : ppmVal(r).toFixed(1); }
 
 /* ---------- Teams ---------- */
 function renderTeams() {
@@ -440,7 +465,7 @@ let riderSort = 'points';
 function renderRenners() {
   const h = `<div class="card"><h2>Renners</h2>
     <div class="row"><input type="text" id="riderSearch" placeholder="zoek renner, ploeg of eigenaar…" style="flex:1">
-    <select id="riderSort"><option value="points">Sorteer: punten</option><option value="name">Sorteer: naam</option><option value="team">Sorteer: ploeg</option><option value="price">Sorteer: prijs</option></select></div>
+    <select id="riderSort"><option value="points">Sorteer: punten</option><option value="name">Sorteer: naam</option><option value="team">Sorteer: ploeg</option><option value="price">Sorteer: prijs</option><option value="ppm">Sorteer: pnt/M</option></select></div>
     <div id="riderTable"></div></div>`;
   $('#tab-renners').innerHTML = h;
   $('#riderSearch').oninput = renderRiderTable;
@@ -451,10 +476,10 @@ function renderRenners() {
 function renderRiderTable() {
   const q = ($('#riderSearch')?.value || '').toLowerCase();
   let list = S.riders.filter(r => !q || (r.name + ' ' + r.team + ' ' + (r.owner || '')).toLowerCase().includes(q));
-  const cmp = { points: (a, b) => b.points - a.points || a.name.localeCompare(b.name), name: (a, b) => a.name.localeCompare(b.name), team: (a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name), price: (a, b) => (b.price || 0) - (a.price || 0) || a.name.localeCompare(b.name) }[riderSort];
+  const cmp = { points: (a, b) => b.points - a.points || a.name.localeCompare(b.name), name: (a, b) => a.name.localeCompare(b.name), team: (a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name), price: (a, b) => (b.price || 0) - (a.price || 0) || a.name.localeCompare(b.name), ppm: (a, b) => ppmVal(b) - ppmVal(a) || b.points - a.points || a.name.localeCompare(b.name) }[riderSort];
   list.sort(cmp);
-  let h = `<div class="muted">${list.length} renners · ${S.riders.filter(r => r.owner).length} verkocht</div><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Prijs</th><th class="num">Pnt</th></tr></thead><tbody>`;
-  list.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">vrij</span>'}</td><td class="num">${r.price != null ? r.price + 'M' : ''}</td><td class="num"><b>${r.points}</b></td></tr>`);
+  let h = `<div class="muted">${list.length} renners · ${S.riders.filter(r => r.owner).length} verkocht</div><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Prijs</th><th class="num">Pnt</th><th class="num" title="punten per miljoen">Pnt/M</th></tr></thead><tbody>`;
+  list.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">vrij</span>'}</td><td class="num">${r.price != null ? r.price + 'M' : ''}</td><td class="num"><b>${r.points}</b></td><td class="num muted">${ppm(r)}</td></tr>`);
   $('#riderTable').innerHTML = h + `</tbody></table>`;
 }
 
