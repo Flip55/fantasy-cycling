@@ -178,7 +178,7 @@ function getState_(p) {
       scoring: cfg.scoring === 'pcs' ? 'pcs' : 'uci',
       lockHour: Number(cfg.lockHour || 22),
       raceSlug: cfg.raceSlug || '',
-      backend: 'v3'
+      backend: 'v4'
     },
     players: players.map(function (x) {
       return { name: x.name, budgetLeft: Number(x.budget_left) };
@@ -523,7 +523,7 @@ function submitResults_(p) {
       if (!isRacePage_(url, cfg.raceSlug)) {
         return { ok: false, error: 'Dit is geen pagina van ' + cfg.raceName + ' (verwacht "' + cfg.raceSlug + '" in de URL).' };
       }
-      var d = deriveLabel_(url);
+      var d = deriveLabel_(url, p.title);
       if (d.error) return { ok: false, error: d.error };
       label = d.label; source = url;
       var m = matchRows_(p.rows, riders);
@@ -576,16 +576,25 @@ function storeImport_(label, matched, unmatched, by, source, isAdmin) {
  * Pure. PCS URL -> label.  .../race/tour-of-guangxi/2026/stage-3 -> stage-3
  * Final classifications: /gc /points /kom /youth. Intermediate tabs (stage-3-gc) are refused.
  */
-function deriveLabel_(url) {
+function deriveLabel_(url, title) {
   var path = String(url || '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\/results?$/, '');
   var seg = path.split('/').pop() || '';
-  // PCS uses both ".../tour-of-guangxi/2026/stage-1" and the flat ".../tour-of-guangxi-2026-stage-1".
-  var m;
-  if ((m = seg.match(/(?:^|-)stage-(\d+)-(gc|points|kom|youth|teams)$/))) {
-    return { error: 'Dit is een tussenstand (stage-' + m[1] + '-' + m[2] + '). Enkel de etappe-uitslag (stage-N) en de eindklassementen (gc, points, kom, youth) tellen.' };
+  // PCS URL layouts seen so far:
+  //   .../tour-of-guangxi/2026/stage-1              (nested)
+  //   .../tour-of-guangxi-2026-stage-1              (flat)
+  //   .../tour-of-guangxi-2026-gc-stage-3-most-combative-rider  (flat with extra tokens; the page
+  //        itself is the stage result, document.title = "Tour of Guangxi 2026 Stage 3 results")
+  // So: find the tokens anywhere in the segment and use the page title to settle ambiguity.
+  var t = String(title || '');
+  var ms = seg.match(/(?:^|-)stage-(\d+)(?=-|$)/);
+  var mc = seg.match(/(?:^|-)(gc|points|kom|youth)(?=-|$)/);
+  var mt = t.match(/\bstage\s*(\d+)\b[^]*\bresults?\b/i);
+  if (mt) return { label: 'stage-' + Number(mt[1]) };            // title is explicit: stage result
+  if (ms && !mc) return { label: 'stage-' + Number(ms[1]) };
+  if (ms && mc) {
+    return { error: 'Dit is een tussenstand (' + mc[1] + ' na stage-' + ms[1] + '). Enkel de etappe-uitslag (stage-N) en de eindklassementen (gc, points, kom, youth) tellen.' };
   }
-  if ((m = seg.match(/(?:^|-)stage-(\d+)$/))) return { label: 'stage-' + Number(m[1]) };
-  if ((m = seg.match(/(?:^|-\d{4}-)(gc|points|kom|youth)$/))) return { label: m[1] };
+  if (mc) return { label: mc[1] };
   if (/(?:^|-)(teams|stages|startlist|result|results)$/.test(seg) || !seg || /^\d{4}$/.test(seg)) {
     return { error: 'Open de uitslag van een etappe (URL eindigt op stage-N) of een eindklassement (gc, points, kom, youth).' };
   }

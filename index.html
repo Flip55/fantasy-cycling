@@ -518,7 +518,7 @@ function renderResultaten() {
       const seg = (pendingImport.url || '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\/results?$/, '').split('/').pop();
       const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const okRace = !c.raceSlug || norm(pendingImport.url).includes(norm(c.raceSlug));
-      h += `<div class="muted">Pagina: <code>${esc(seg)}</code> · ${esc(pendingImport.title || '')}<br><small>${esc(pendingImport.url || '')} · site v3 · backend ${esc(c.backend || 'v1/v2 (verouderd)')}</small></div>`;
+      h += `<div class="muted">Pagina: <code>${esc(seg)}</code> · ${esc(pendingImport.title || '')}<br><small>${esc(pendingImport.url || '')} · site v4 · backend ${esc(c.backend || 'v1/v2 (verouderd)')}</small></div>`;
       if (!okRace) h += `<div class="msg err">Dit is geen pagina van ${esc(c.raceName)}.</div>`;
       const u = c.scoring === 'uci';
       h += `<table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th class="num">UCI${u ? ' ✓' : ''}</th><th class="num">PCS${u ? '' : ' ✓'}</th></tr></thead><tbody>`;

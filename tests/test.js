@@ -103,6 +103,11 @@ assert.ok(isRacePage_('https://www.procyclingstats.com/race/tour-of-guangxi-2026
 assert.ok(isRacePage_('https://www.procyclingstats.com/race/tour-of-guangxi/2026/stage-1', 'tour-of-guangxi/2026'));
 assert.ok(!isRacePage_('https://www.procyclingstats.com/race/tour-of-guangxi-2025-stage-1', 'tour-of-guangxi/2026'));
 assert.ok(!isRacePage_('https://www.procyclingstats.com/race/il-lombardia-2026-result', 'tour-of-guangxi/2026'));
+// October 2026: flat URL with extra tokens; the title settles it
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-gc-stage-3-most-combative-rider', 'Tour of Guangxi 2026 Stage 3 results'), { label: 'stage-3' });
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-stage-3-most-combative-rider'), { label: 'stage-3' });
+assert.ok(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-gc-stage-3-most-combative-rider').error, 'ambiguous gc+stage without title refused');
+assert.deepStrictEqual(deriveLabel_('https://www.procyclingstats.com/race/tour-of-guangxi-2026-gc-final', 'Tour of Guangxi 2026 GC'), { label: 'gc' });
 assert.strictEqual(normalizeLabel_('Etappe 2'), 'stage-2');
 assert.strictEqual(normalizeLabel_('stage-10'), 'stage-10');
 assert.strictEqual(normalizeLabel_('4'), 'stage-4');
