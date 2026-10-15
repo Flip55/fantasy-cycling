@@ -571,7 +571,7 @@ function renderResultaten() {
     $('#sendImport').onclick = async () => {
       const btn = $('#sendImport'); btn.disabled = true;
       try {
-        const r = await api({ action: 'submitResults', token, url: pendingImport.url, rows: pendingImport.rows }, true);
+        const r = await api({ action: 'submitResults', token, url: pendingImport.url, title: pendingImport.title, rows: pendingImport.rows }, true);
         pendingImport = null;
         await load(); document.querySelector('[data-tab=resultaten]').click();
         $('#tab-resultaten').insertAdjacentHTML('afterbegin', importOkMsg(r));
