@@ -18,6 +18,7 @@ tests/                 node-tests + lokale mock server
 - Na elke ronde zijn alle biedingen openbaar.
 - Punten = UCI-punten zoals PCS ze toont, verwerkt om 22u; latere correcties tellen niet.
 - Resterend budget is tiebreaker in het eindklassement.
+- Het Klassement toont het totaal, of per verwerkte uitslag (Etappe 1, Etappe 2, …, eindklassementen): zelfde knoppen bovenaan schakelen ook de Topscorers mee.
 
 De volledige tekst staat in de app onder **Regels**.
 

@@ -42,9 +42,10 @@ const base = {
 };
 const after = JSON.parse(JSON.stringify(base));
 after.config.roundOpen = false; after.config.deadline = '';
-after.resultLabels = ['Etappe 1', 'Etappe 2'];
-const pts = { 'MAGNIER Paul': 60 + 60, 'KOOIJ Olav': 25 + 25, 'GROVES Kaden': 10 + 10, 'MEEUS Jordi': 5 + 3, 'JAKOBSEN Fabio': 3 + 5, 'MOLANO Juan Sebastian': 1 + 1, 'PIDCOCK Tom': 0, 'DE KLEIJN Arvid': 1, 'FRETIN Milan': 1 };
-after.riders.forEach(r => { if (pts[r.name]) r.points = pts[r.name]; });
+after.resultLabels = ['stage-1', 'stage-2'];
+after.imports = [{ label: 'stage-1', name: 'Etappe 1', locked: true }, { label: 'stage-2', name: 'Etappe 2', locked: false }];
+const pts = { 'MAGNIER Paul': [60, 60], 'KOOIJ Olav': [25, 25], 'GROVES Kaden': [10, 10], 'MEEUS Jordi': [5, 3], 'JAKOBSEN Fabio': [3, 5], 'MOLANO Juan Sebastian': [1, 1], 'DE KLEIJN Arvid': [1, 0], 'FRETIN Milan': [0, 1] };
+after.riders.forEach(r => { const v = pts[r.name]; if (!v) return; r.points = v[0] + v[1]; r.byLabel = {}; if (v[0]) r.byLabel['stage-1'] = v[0]; if (v[1]) r.byLabel['stage-2'] = v[1]; });
 
 let html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 html = html.replace(/const API_URL = "[^"]*";/, 'const API_URL = "demo";');

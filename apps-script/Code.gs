@@ -139,10 +139,13 @@ function getState_(p) {
   var round = Number(cfg.round);
   var roundOpen = cfg.roundOpen === 'true';
 
-  var pointsByRider = {};
+  var pointsByRider = {}, byLabel = {};   // byLabel[rider_id][label] = points of that import (per-stage view)
   results.forEach(function (r) {
     var v = cfg.scoring === 'pcs' ? Number(r.pcs || 0) : Number(r.points || 0);
+    if (!v) return;
     pointsByRider[r.rider_id] = (pointsByRider[r.rider_id] || 0) + v;
+    if (!byLabel[r.rider_id]) byLabel[r.rider_id] = {};
+    byLabel[r.rider_id][r.label] = (byLabel[r.rider_id][r.label] || 0) + v;
   });
 
   // identify caller (optional)
@@ -178,7 +181,7 @@ function getState_(p) {
       scoring: cfg.scoring === 'pcs' ? 'pcs' : 'uci',
       lockHour: Number(cfg.lockHour || 22),
       raceSlug: cfg.raceSlug || '',
-      backend: 'v4'
+      backend: 'v5'
     },
     players: players.map(function (x) {
       return { name: x.name, budgetLeft: Number(x.budget_left) };
@@ -189,7 +192,8 @@ function getState_(p) {
         owner: r.owner || null,
         price: r.price === '' ? null : Number(r.price),
         round: r.round === '' ? null : Number(r.round),
-        points: pointsByRider[r.id] || 0
+        points: pointsByRider[r.id] || 0,
+        byLabel: byLabel[r.id] || {}
       };
     }),
     bids: publicBids,

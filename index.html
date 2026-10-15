@@ -48,6 +48,9 @@ tr.me+tr.detail td{background:#fff6ef}
 .scorers .n{color:var(--muted)}
 .chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:500}
 .chip.gold{background:#f6e7bd}
+.views{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.vbtn{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:600 13px Inter,sans-serif;cursor:pointer}
+.vbtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 button.btn,.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:8px;padding:9px 14px;font:600 14px Inter,sans-serif;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .btn.danger{background:var(--bad)}
@@ -246,11 +249,16 @@ function ask(text, yesLabel) {
 }
 
 /* ---------- helpers ---------- */
-function standings() {
+// view = 'total' (all points) or an import label ('stage-2', 'gc', …): points of that import only
+function riderPts(r, view) { return (!view || view === 'total') ? r.points : ((r.byLabel || {})[view] || 0); }
+function standings(view) {
   return S.players.map(p => {
     const riders = S.riders.filter(r => r.owner === p.name);
-    return { name: p.name, budgetLeft: p.budgetLeft, riders, points: riders.reduce((s, r) => s + r.points, 0), spent: riders.reduce((s, r) => s + (r.price || 0), 0) };
-  }).sort((a, b) => b.points - a.points || b.budgetLeft - a.budgetLeft || a.name.localeCompare(b.name));
+    return { name: p.name, budgetLeft: p.budgetLeft, riders,
+      points: riders.reduce((s, r) => s + riderPts(r, view), 0),
+      total: riders.reduce((s, r) => s + r.points, 0),
+      spent: riders.reduce((s, r) => s + (r.price || 0), 0) };
+  }).sort((a, b) => b.points - a.points || b.total - a.total || b.budgetLeft - a.budgetLeft || a.name.localeCompare(b.name));
 }
 function roundStatus() {
   const c = S.config;
@@ -261,30 +269,49 @@ function roundStatus() {
 }
 
 /* ---------- Klassement ---------- */
+let standView = 'total';   // 'total' or an import label: which points the Klassement shows
 function renderStand() {
-  const st = standings();
+  const imports = S.imports || [];
+  // stage imports first (in stage order), then the final classifications; per-stage view needs backend v5 (byLabel)
+  const views = [...imports].sort((a, b) => {
+    const na = /^stage-(\d+)$/.exec(a.label), nb = /^stage-(\d+)$/.exec(b.label);
+    if (na && nb) return na[1] - nb[1];
+    if (na) return -1; if (nb) return 1;
+    return 0;
+  });
+  const hasBreakdown = S.riders.some(r => r.byLabel);
+  if (standView !== 'total' && !views.some(v => v.label === standView)) standView = 'total';
+  const view = standView;
+  const cur = views.find(v => v.label === view);
+  const st = standings(view);
   const rs = roundStatus();
-  let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${(S.imports || []).length ? 'Verwerkt: ' + S.imports.map(i => esc(i.name) + (i.locked ? ' 🔒' : '')).join(', ') : 'Nog geen resultaten verwerkt.'}</div>
-  <table><thead><tr><th>#</th><th>Speler</th><th class="num">${S.config.scoring === 'pcs' ? 'PCS-pnt' : 'UCI-pnt'}</th><th class="num hidesm">Renners</th><th class="num">Budget over</th></tr></thead><tbody>`;
+  const ptsLabel = S.config.scoring === 'pcs' ? 'PCS-pnt' : 'UCI-pnt';
+  let h = `<div class="card"><h2>Klassement</h2><div class="muted">${esc(rs.text)} · ${imports.length ? 'Verwerkt: ' + imports.map(i => esc(i.name) + (i.locked ? ' 🔒' : '')).join(', ') : 'Nog geen resultaten verwerkt.'}</div>`;
+  if (hasBreakdown && views.length) {
+    h += `<div class="views"><button class="vbtn ${view === 'total' ? 'on' : ''}" data-view="total">Totaal</button>` +
+      views.map(v => `<button class="vbtn ${view === v.label ? 'on' : ''}" data-view="${esc(v.label)}">${esc(v.name)}</button>`).join('') + `</div>`;
+  }
+  h += `<table><thead><tr><th>#</th><th>Speler</th><th class="num">${cur ? esc(cur.name) : ptsLabel}</th>${cur ? '<th class="num">Totaal</th>' : ''}<th class="num hidesm">Renners</th><th class="num ${cur ? 'hidesm' : ''}">Budget over</th></tr></thead><tbody>`;
   st.forEach((p, i) => {
-    const scorers = [...p.riders].filter(r => r.points > 0).sort((a, b) => b.points - a.points);
+    const scorers = [...p.riders].filter(r => riderPts(r, view) > 0).sort((a, b) => riderPts(b, view) - riderPts(a, view));
     const canOpen = scorers.length > 0;
-    h += `<tr class="${p.name === S.me ? 'me' : ''} ${canOpen ? 'expandable' : ''}" data-player="${esc(p.name)}"><td>${i + 1}</td><td><b>${esc(p.name)}</b>${canOpen ? '<span class="caret">▸</span>' : ''}</td><td class="num"><b>${p.points}</b></td><td class="num hidesm">${p.riders.length}</td><td class="num">${p.budgetLeft}M</td></tr>`;
+    h += `<tr class="${p.name === S.me ? 'me' : ''} ${canOpen ? 'expandable' : ''}" data-player="${esc(p.name)}"><td>${i + 1}</td><td><b>${esc(p.name)}</b>${canOpen ? '<span class="caret">▸</span>' : ''}</td><td class="num"><b>${p.points}</b></td>${cur ? `<td class="num muted">${p.total}</td>` : ''}<td class="num hidesm">${p.riders.length}</td><td class="num ${cur ? 'hidesm' : ''}">${p.budgetLeft}M</td></tr>`;
     if (canOpen) {
-      h += `<tr class="detail hidden" data-detail="${esc(p.name)}"><td></td><td colspan="4"><div class="scorers">` +
-        scorers.map(r => `<span><span class="n">${esc(r.name)}</span> <b>${r.points}</b></span>`).join('') +
+      h += `<tr class="detail hidden" data-detail="${esc(p.name)}"><td></td><td colspan="${cur ? 5 : 4}"><div class="scorers">` +
+        scorers.map(r => `<span><span class="n">${esc(r.name)}</span> <b>${riderPts(r, view)}</b></span>`).join('') +
         `</div></td></tr>`;
     }
   });
-  h += `</tbody></table><div class="muted" style="font-size:12px;margin-top:6px">Klik op een speler om te zien wie de punten scoorde.</div></div>`;
-  // top scorers
-  const top = [...S.riders].filter(r => r.points > 0).sort((a, b) => b.points - a.points).slice(0, 10);
+  h += `</tbody></table><div class="muted" style="font-size:12px;margin-top:6px">${cur ? `Punten van ${esc(cur.name)}; de plaats in het totaalklassement vind je onder Totaal.` : 'Klik op een speler om te zien wie de punten scoorde.'}</div></div>`;
+  // top scorers (of the selected view)
+  const top = [...S.riders].filter(r => riderPts(r, view) > 0).sort((a, b) => riderPts(b, view) - riderPts(a, view) || b.points - a.points).slice(0, 10);
   if (top.length) {
-    h += `<div class="card"><h2>Topscorers</h2><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th><th class="num" title="punten per miljoen">Pnt/M</th></tr></thead><tbody>`;
-    top.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">–</span>'}</td><td class="num"><b>${r.points}</b></td><td class="num muted">${ppm(r)}</td></tr>`);
+    h += `<div class="card"><h2>Topscorers${cur ? ' – ' + esc(cur.name) : ''}</h2><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th><th class="num" title="${cur ? 'totaal over alle etappes' : 'punten per miljoen'}">${cur ? 'Totaal' : 'Pnt/M'}</th></tr></thead><tbody>`;
+    top.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">–</span>'}</td><td class="num"><b>${riderPts(r, view)}</b></td><td class="num muted">${cur ? r.points : ppm(r)}</td></tr>`);
     h += `</tbody></table></div>`;
   }
   $('#tab-stand').innerHTML = h;
+  $('#tab-stand').querySelectorAll('.vbtn').forEach(b => b.onclick = () => { standView = b.dataset.view; renderStand(); });
   $('#tab-stand').querySelectorAll('tr.expandable').forEach(tr => tr.onclick = () => {
     const d = $('#tab-stand').querySelector(`tr[data-detail="${CSS.escape(tr.dataset.player)}"]`);
     if (!d) return;
