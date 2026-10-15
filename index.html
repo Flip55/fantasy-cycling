@@ -304,9 +304,9 @@ function renderStand() {
   });
   h += `</tbody></table><div class="muted" style="font-size:12px;margin-top:6px">${cur ? `Punten van ${esc(cur.name)}; de plaats in het totaalklassement vind je onder Totaal.` : 'Klik op een speler om te zien wie de punten scoorde.'}</div></div>`;
   // top scorers (of the selected view)
-  const top = [...S.riders].filter(r => riderPts(r, view) > 0).sort((a, b) => riderPts(b, view) - riderPts(a, view) || b.points - a.points).slice(0, 10);
+  const top = [...S.riders].filter(r => riderPts(r, view) > 0).sort((a, b) => riderPts(b, view) - riderPts(a, view) || b.points - a.points);
   if (top.length) {
-    h += `<div class="card"><h2>Topscorers${cur ? ' – ' + esc(cur.name) : ''}</h2><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th><th class="num" title="${cur ? 'totaal over alle etappes' : 'punten per miljoen'}">${cur ? 'Totaal' : 'Pnt/M'}</th></tr></thead><tbody>`;
+    h += `<div class="card"><h2>Topscorers${cur ? ' – ' + esc(cur.name) : ''}</h2><div class="muted">${top.length} renners met punten.</div><table><thead><tr><th>Renner</th><th class="hidesm">Ploeg</th><th>Eigenaar</th><th class="num">Pnt</th><th class="num" title="${cur ? 'totaal over alle etappes' : 'punten per miljoen'}">${cur ? 'Totaal' : 'Pnt/M'}</th></tr></thead><tbody>`;
     top.forEach(r => h += `<tr><td>${esc(r.name)}</td><td class="hidesm muted">${esc(r.team)}</td><td>${r.owner ? esc(r.owner) : '<span class="muted">–</span>'}</td><td class="num"><b>${riderPts(r, view)}</b></td><td class="num muted">${cur ? r.points : ppm(r)}</td></tr>`);
     h += `</tbody></table></div>`;
   }
